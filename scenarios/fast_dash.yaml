@@ -1,0 +1,38 @@
+name: "Fast dash \u2014 high-speed formation through dense sensor field"
+area:
+  width_km: 10.0
+  height_km: 10.0
+dt: 0.5
+duration: 60
+seed: 99
+
+# Geographic reference point (generic)
+reference_origin:
+  - 40.0  # latitude
+  - -100.0  # longitude
+
+detection:
+  mode: probabilistic
+  range: 1.5
+  pd_function: sigmoid
+  pd_half_range: 1.0
+groups:
+- group_id: sprint
+  count: 5
+  mode: formation
+  heading:
+  - 1.0
+  - 0.0
+  speed: 0.25
+  spawn_center:
+  - 0.5
+  - 5.0
+  spawn_radius: 0.2
+  spacing_profile: uniform
+  spawn_altitude: 0.500
+  spawn_altitude_range: 0.150
+sensors:
+  layout: grid
+  detection_range: 1.5
+  spacing: 1.5
+  altitude: 0.010

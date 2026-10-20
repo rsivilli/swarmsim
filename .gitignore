@@ -1,0 +1,27 @@
+.claude
+
+# Python artifacts
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+*.egg-info/
+dist/
+build/
+
+# Output directories
+output/
+
+# JSON files (except examples and sample_output)
+*.json
+!scenarios/*.json
+!sample_output/*.json
+
+.envrc
+
+# Test and animation artifacts
+.pytest_cache/
+*.gif
+!docs/*.gif
+*.mp4
+*.mov

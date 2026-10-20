@@ -1,0 +1,384 @@
+name: "EU Drone Wall \u2014 border sensor network vs cross-border penetration"
+area:
+  width_km: 100.0
+  height_km: 40.0
+dt: 10
+duration: 2400
+seed: 2027
+
+# Geographic reference point (Russia-Ukraine border region)
+reference_origin:
+  - 52.7  # latitude (52°42'00.0"N)
+  - 23.8  # longitude (23°48'00.0"E)
+
+detection:
+  mode: probabilistic
+  range: 7.0
+  pd_function: exponential
+  pd_half_range: 5.0
+groups:
+- group_id: low_slow
+  count: 300
+  mode: swarm
+  heading:
+  - -0.7
+  - -0.7
+  speed_min: 0.02
+  speed_max: 0.04
+  spawn_center:
+  - 50.0
+  - 39.5
+  spawn_radius: 20.0
+  spacing_profile: random
+  spawn_altitude: 0.080
+  spawn_altitude_range: 0.060
+- group_id: fast_dash
+  count: 100
+  mode: swarm
+  heading:
+  - -0.8
+  - -0.6
+  speed_min: 0.055
+  speed_max: 0.07
+  spawn_center:
+  - 30.0
+  - 39.5
+  spawn_radius: 5.0
+  spacing_profile: gaussian
+  spawn_altitude: 0.300
+  spawn_altitude_range: 0.150
+- group_id: probes
+  count: 100
+  mode: swarm
+  heading:
+  - -0.6
+  - -0.8
+  speed_min: 0.05
+  speed_max: 0.065
+  spawn_center:
+  - 70.0
+  - 39.5
+  spawn_radius: 10.0
+  spacing_profile: random
+  spawn_altitude: 0.250
+  spawn_altitude_range: 0.120
+sensors:
+  layout: manual
+  detection_range: 7.0
+  positions:
+  - - 2.5
+    - 10.0
+    - 0.015
+  - - 7.5
+    - 10.0
+    - 0.015
+  - - 12.5
+    - 10.0
+    - 0.015
+  - - 17.5
+    - 10.0
+    - 0.015
+  - - 22.5
+    - 10.0
+    - 0.015
+  - - 27.5
+    - 10.0
+    - 0.015
+  - - 32.5
+    - 10.0
+    - 0.015
+  - - 37.5
+    - 10.0
+    - 0.015
+  - - 42.5
+    - 10.0
+    - 0.015
+  - - 47.5
+    - 10.0
+    - 0.015
+  - - 52.5
+    - 10.0
+    - 0.015
+  - - 57.5
+    - 10.0
+    - 0.015
+  - - 62.5
+    - 10.0
+    - 0.015
+  - - 67.5
+    - 10.0
+    - 0.015
+  - - 72.5
+    - 10.0
+    - 0.015
+  - - 77.5
+    - 10.0
+    - 0.015
+  - - 82.5
+    - 10.0
+    - 0.015
+  - - 87.5
+    - 10.0
+    - 0.015
+  - - 92.5
+    - 10.0
+    - 0.015
+  - - 97.5
+    - 10.0
+    - 0.015
+  - - 5.0
+    - 25.0
+    - 0.015
+  - - 15.0
+    - 25.0
+    - 0.015
+  - - 25.0
+    - 25.0
+    - 0.015
+  - - 35.0
+    - 25.0
+    - 0.015
+  - - 45.0
+    - 25.0
+    - 0.015
+  - - 55.0
+    - 25.0
+    - 0.015
+  - - 65.0
+    - 25.0
+    - 0.015
+  - - 75.0
+    - 25.0
+    - 0.015
+  - - 85.0
+    - 25.0
+    - 0.015
+  - - 95.0
+    - 25.0
+    - 0.015
+
+communication:
+  enabled: true
+  reference_origin:
+  - 52.7
+  - 23.8
+  topology:
+    bundling_mode: none
+    transport: zenoh
+  strategy:
+    name: direct_zenoh
+    protocol: zenoh_pubsub
+    bundling: false
+  sensor_metadata:
+  # Front wall - 20 edge radar sensors (direct to backend)
+  - sensor_idx: 0
+    sensor_id: WALL-RADAR-01
+    asset: TOWER-W01
+    asset_nat: NATO
+    sen_type: RADAR
+    network_tier: 0
+    relay_parent: null
+  - sensor_idx: 1
+    sensor_id: WALL-RADAR-02
+    asset: TOWER-W02
+    asset_nat: NATO
+    sen_type: RADAR
+    network_tier: 0
+    relay_parent: null
+  - sensor_idx: 2
+    sensor_id: WALL-RADAR-03
+    asset: TOWER-W03
+    asset_nat: NATO
+    sen_type: RADAR
+    network_tier: 0
+    relay_parent: null
+  - sensor_idx: 3
+    sensor_id: WALL-RADAR-04
+    asset: TOWER-W04
+    asset_nat: NATO
+    sen_type: RADAR
+    network_tier: 0
+    relay_parent: null
+  - sensor_idx: 4
+    sensor_id: WALL-RADAR-05
+    asset: TOWER-W05
+    asset_nat: NATO
+    sen_type: RADAR
+    network_tier: 0
+    relay_parent: null
+  - sensor_idx: 5
+    sensor_id: WALL-RADAR-06
+    asset: TOWER-W06
+    asset_nat: NATO
+    sen_type: RADAR
+    network_tier: 0
+    relay_parent: null
+  - sensor_idx: 6
+    sensor_id: WALL-RADAR-07
+    asset: TOWER-W07
+    asset_nat: NATO
+    sen_type: RADAR
+    network_tier: 0
+    relay_parent: null
+  - sensor_idx: 7
+    sensor_id: WALL-RADAR-08
+    asset: TOWER-W08
+    asset_nat: NATO
+    sen_type: RADAR
+    network_tier: 0
+    relay_parent: null
+  - sensor_idx: 8
+    sensor_id: WALL-RADAR-09
+    asset: TOWER-W09
+    asset_nat: NATO
+    sen_type: RADAR
+    network_tier: 0
+    relay_parent: null
+  - sensor_idx: 9
+    sensor_id: WALL-RADAR-10
+    asset: TOWER-W10
+    asset_nat: NATO
+    sen_type: RADAR
+    network_tier: 0
+    relay_parent: null
+  - sensor_idx: 10
+    sensor_id: WALL-RADAR-11
+    asset: TOWER-W11
+    asset_nat: NATO
+    sen_type: RADAR
+    network_tier: 0
+    relay_parent: null
+  - sensor_idx: 11
+    sensor_id: WALL-RADAR-12
+    asset: TOWER-W12
+    asset_nat: NATO
+    sen_type: RADAR
+    network_tier: 0
+    relay_parent: null
+  - sensor_idx: 12
+    sensor_id: WALL-RADAR-13
+    asset: TOWER-W13
+    asset_nat: NATO
+    sen_type: RADAR
+    network_tier: 0
+    relay_parent: null
+  - sensor_idx: 13
+    sensor_id: WALL-RADAR-14
+    asset: TOWER-W14
+    asset_nat: NATO
+    sen_type: RADAR
+    network_tier: 0
+    relay_parent: null
+  - sensor_idx: 14
+    sensor_id: WALL-RADAR-15
+    asset: TOWER-W15
+    asset_nat: NATO
+    sen_type: RADAR
+    network_tier: 0
+    relay_parent: null
+  - sensor_idx: 15
+    sensor_id: WALL-RADAR-16
+    asset: TOWER-W16
+    asset_nat: NATO
+    sen_type: RADAR
+    network_tier: 0
+    relay_parent: null
+  - sensor_idx: 16
+    sensor_id: WALL-RADAR-17
+    asset: TOWER-W17
+    asset_nat: NATO
+    sen_type: RADAR
+    network_tier: 0
+    relay_parent: null
+  - sensor_idx: 17
+    sensor_id: WALL-RADAR-18
+    asset: TOWER-W18
+    asset_nat: NATO
+    sen_type: RADAR
+    network_tier: 0
+    relay_parent: null
+  - sensor_idx: 18
+    sensor_id: WALL-RADAR-19
+    asset: TOWER-W19
+    asset_nat: NATO
+    sen_type: RADAR
+    network_tier: 0
+    relay_parent: null
+  - sensor_idx: 19
+    sensor_id: WALL-RADAR-20
+    asset: TOWER-W20
+    asset_nat: NATO
+    sen_type: RADAR
+    network_tier: 0
+    relay_parent: null
+  # Rear echelon - 10 sensors (also direct, no relay role)
+  - sensor_idx: 20
+    sensor_id: WALL-RADAR-21
+    asset: TOWER-R01
+    asset_nat: NATO
+    sen_type: RADAR
+    network_tier: 0
+    relay_parent: null
+  - sensor_idx: 21
+    sensor_id: WALL-RADAR-22
+    asset: TOWER-R02
+    asset_nat: NATO
+    sen_type: RADAR
+    network_tier: 0
+    relay_parent: null
+  - sensor_idx: 22
+    sensor_id: WALL-RADAR-23
+    asset: TOWER-R03
+    asset_nat: NATO
+    sen_type: RADAR
+    network_tier: 0
+    relay_parent: null
+  - sensor_idx: 23
+    sensor_id: WALL-RADAR-24
+    asset: TOWER-R04
+    asset_nat: NATO
+    sen_type: RADAR
+    network_tier: 0
+    relay_parent: null
+  - sensor_idx: 24
+    sensor_id: WALL-RADAR-25
+    asset: TOWER-R05
+    asset_nat: NATO
+    sen_type: RADAR
+    network_tier: 0
+    relay_parent: null
+  - sensor_idx: 25
+    sensor_id: WALL-RADAR-26
+    asset: TOWER-R06
+    asset_nat: NATO
+    sen_type: RADAR
+    network_tier: 0
+    relay_parent: null
+  - sensor_idx: 26
+    sensor_id: WALL-RADAR-27
+    asset: TOWER-R07
+    asset_nat: NATO
+    sen_type: RADAR
+    network_tier: 0
+    relay_parent: null
+  - sensor_idx: 27
+    sensor_id: WALL-RADAR-28
+    asset: TOWER-R08
+    asset_nat: NATO
+    sen_type: RADAR
+    network_tier: 0
+    relay_parent: null
+  - sensor_idx: 28
+    sensor_id: WALL-RADAR-29
+    asset: TOWER-R09
+    asset_nat: NATO
+    sen_type: RADAR
+    network_tier: 0
+    relay_parent: null
+  - sensor_idx: 29
+    sensor_id: WALL-RADAR-30
+    asset: TOWER-R10
+    asset_nat: NATO
+    sen_type: RADAR
+    network_tier: 0
+    relay_parent: null

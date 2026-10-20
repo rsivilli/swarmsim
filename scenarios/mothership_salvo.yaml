@@ -1,0 +1,180 @@
+name: "Jiu Tian mothership \u2014 3 carriers releasing 450 loitering munitions"
+area:
+  width_km: 30.0
+  height_km: 20.0
+dt: 0.1
+duration: 1200
+seed: 2026
+
+# Geographic reference point (East China Sea)
+reference_origin:
+  - 28.0  # latitude
+  - 125.0  # longitude
+
+detection:
+  mode: binary
+  range: 6.0
+groups:
+- group_id: ms1_payload
+  count: 150
+  mode: swarm
+  heading:
+  - 1.0
+  - 0.0
+  speed_min: 0.03
+  speed_max: 0.05
+  spawn_center:
+  - 1.0
+  - 10.0
+  spawn_radius: 0.3
+  spacing_profile: gaussian
+  spawn_altitude: 1.000
+  spawn_altitude_range: 0.400
+- group_id: ms2_payload
+  count: 150
+  mode: swarm
+  heading:
+  - 1.0
+  - -0.3
+  speed_min: 0.03
+  speed_max: 0.05
+  spawn_center:
+  - 1.0
+  - 16.0
+  spawn_radius: 0.3
+  spacing_profile: gaussian
+  spawn_altitude: 1.000
+  spawn_altitude_range: 0.400
+- group_id: ms3_payload
+  count: 150
+  mode: swarm
+  heading:
+  - 1.0
+  - 0.3
+  speed_min: 0.03
+  speed_max: 0.05
+  spawn_center:
+  - 1.0
+  - 4.0
+  spawn_radius: 0.3
+  spacing_profile: gaussian
+  spawn_altitude: 1.000
+  spawn_altitude_range: 0.400
+sensors:
+  layout: manual
+  detection_range: 6.0
+  positions:
+  - - 10.0
+    - 5.0
+    - 0.012
+  - - 10.0
+    - 10.0
+    - 0.012
+  - - 10.0
+    - 15.0
+    - 0.012
+  - - 18.0
+    - 3.0
+    - 0.012
+  - - 18.0
+    - 8.0
+    - 0.012
+  - - 18.0
+    - 12.0
+    - 0.012
+  - - 18.0
+    - 17.0
+    - 0.012
+  - - 25.0
+    - 7.0
+    - 0.012
+  - - 25.0
+    - 10.0
+    - 0.012
+  - - 25.0
+    - 13.0
+    - 0.012
+
+communication:
+  enabled: true
+  reference_origin:
+  - 28.0
+  - 125.0
+  topology:
+    bundling_mode: none
+    transport: zenoh
+  strategy:
+    name: direct_zenoh
+    protocol: zenoh_pubsub
+    bundling: false
+  sensor_metadata:
+  - sensor_idx: 0
+    sensor_id: RADAR-01
+    asset: PICKET-SOUTH
+    asset_nat: JP
+    sen_type: RADAR
+    network_tier: 0
+    relay_parent: null
+  - sensor_idx: 1
+    sensor_id: RADAR-02
+    asset: PICKET-CENTER
+    asset_nat: JP
+    sen_type: RADAR
+    network_tier: 0
+    relay_parent: null
+  - sensor_idx: 2
+    sensor_id: RADAR-03
+    asset: PICKET-NORTH
+    asset_nat: JP
+    sen_type: RADAR
+    network_tier: 0
+    relay_parent: null
+  - sensor_idx: 3
+    sensor_id: RADAR-04
+    asset: SCREEN-SOUTH
+    asset_nat: US
+    sen_type: RADAR
+    network_tier: 0
+    relay_parent: null
+  - sensor_idx: 4
+    sensor_id: RADAR-05
+    asset: SCREEN-CSOUTH
+    asset_nat: US
+    sen_type: RADAR
+    network_tier: 0
+    relay_parent: null
+  - sensor_idx: 5
+    sensor_id: RADAR-06
+    asset: SCREEN-CNORTH
+    asset_nat: US
+    sen_type: RADAR
+    network_tier: 0
+    relay_parent: null
+  - sensor_idx: 6
+    sensor_id: RADAR-07
+    asset: SCREEN-NORTH
+    asset_nat: US
+    sen_type: RADAR
+    network_tier: 0
+    relay_parent: null
+  - sensor_idx: 7
+    sensor_id: RADAR-08
+    asset: DEEP-SOUTH
+    asset_nat: US
+    sen_type: RADAR
+    network_tier: 0
+    relay_parent: null
+  - sensor_idx: 8
+    sensor_id: RADAR-09
+    asset: DEEP-CENTER
+    asset_nat: US
+    sen_type: RADAR
+    network_tier: 0
+    relay_parent: null
+  - sensor_idx: 9
+    sensor_id: RADAR-10
+    asset: DEEP-NORTH
+    asset_nat: US
+    sen_type: RADAR
+    network_tier: 0
+    relay_parent: null

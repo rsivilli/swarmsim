@@ -1,0 +1,31 @@
+name: Grid sensors vs loose swarm
+area:
+  width_km: 10.0
+  height_km: 10.0
+dt: 1.0
+duration: 200
+seed: 42
+detection:
+  mode: binary
+  range: 2.0
+groups:
+- group_id: alpha
+  count: 30
+  mode: swarm
+  heading:
+  - 1.0
+  - -0.3
+  speed_min: 0.04
+  speed_max: 0.07
+  spawn_center:
+  - 0.5
+  - 7.0
+  spawn_radius: 1.0
+  spacing_profile: gaussian
+  spawn_altitude: 0.250
+  spawn_altitude_range: 0.120
+sensors:
+  layout: grid
+  detection_range: 2.0
+  spacing: 2.5
+  altitude: 0.008

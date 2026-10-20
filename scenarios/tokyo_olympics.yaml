@@ -1,0 +1,51 @@
+name: "Tokyo 2020 \u2014 1,824 drones morphing over stadium"
+area:
+  width_km: 0.5
+  height_km: 0.5
+dt: 0.5
+duration: 300
+seed: 2020
+
+# Geographic reference point (Tokyo National Stadium)
+reference_origin:
+  - 35.6785  # latitude
+  - 139.7144  # longitude
+
+detection:
+  mode: binary
+  range: 0.22
+groups:
+- group_id: globe_core
+  count: 1200
+  mode: formation
+  heading:
+  - 0.003
+  - 0.0
+  speed: 0.003
+  spawn_center:
+  - 0.15
+  - 0.25
+  spawn_radius: 0.08
+  spacing_profile: uniform
+  spawn_altitude: 0.150
+  spawn_altitude_range: 0.040
+- group_id: globe_outer
+  count: 624
+  mode: swarm
+  heading:
+  - 0.002
+  - 0.001
+  speed_min: 0.001
+  speed_max: 0.004
+  spawn_center:
+  - 0.2
+  - 0.25
+  spawn_radius: 0.12
+  spacing_profile: gaussian
+  spawn_altitude: 0.150
+  spawn_altitude_range: 0.040
+sensors:
+  layout: grid
+  detection_range: 0.22
+  spacing: 0.12
+  altitude: 0.010

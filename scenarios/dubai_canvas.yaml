@@ -1,0 +1,36 @@
+name: "Dubai DSF \u2014 1,000 drone pixel canvas over JBR"
+area:
+  width_km: 0.6
+  height_km: 0.4
+dt: 0.5
+duration: 480
+seed: 2025
+
+# Geographic reference point (Dubai JBR)
+reference_origin:
+  - 25.0778  # latitude
+  - 55.1344  # longitude
+
+detection:
+  mode: binary
+  range: 0.20
+groups:
+- group_id: canvas
+  count: 1000
+  mode: formation
+  heading:
+  - 0.001
+  - 0.0
+  speed: 0.001
+  spawn_center:
+  - 0.1
+  - 0.2
+  spawn_radius: 0.15
+  spacing_profile: uniform
+  spawn_altitude: 0.120
+  spawn_altitude_range: 0.030
+sensors:
+  layout: grid
+  detection_range: 0.20
+  spacing: 0.12
+  altitude: 0.005

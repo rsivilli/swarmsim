@@ -1,0 +1,75 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "modsim-locust.fullname" . }}-worker
+  labels:
+    {{- include "modsim-locust.labels" . | nindent 4 }}
+    component: worker
+spec:
+  replicas: {{ .Values.locust.worker.replicas }}
+  selector:
+    matchLabels:
+      {{- include "modsim-locust.selectorLabels" . | nindent 6 }}
+      component: worker
+  template:
+    metadata:
+      labels:
+        {{- include "modsim-locust.selectorLabels" . | nindent 8 }}
+        component: worker
+    spec:
+      containers:
+      - name: locust-worker
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        env:
+        - name: TIMELINE_PATH
+          value: {{ .Values.timeline.path | quote }}
+        - name: ZENOH_TRANSPORT
+          value: {{ .Values.transport.mode | quote }}
+        {{- if eq .Values.transport.mode "native" }}
+        - name: ZENOH_ROUTER
+          value: {{ .Values.transport.zenohRouter | quote }}
+        {{- end }}
+        {{- if eq .Values.transport.mode "udl" }}
+        - name: UDL_AUTH_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.udl.secretName }}
+              key: username
+        - name: UDL_AUTH_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.udl.secretName }}
+              key: password
+        - name: UDL_BASE_URL
+          value: {{ .Values.udl.baseUrl | quote }}
+        - name: UDL_CLASSIFICATION
+          value: {{ .Values.udl.classification | quote }}
+        {{- end }}
+        command:
+        - locust
+        - -f
+        - /locust/locustfile.py
+        - --worker
+        - --master-host={{ include "modsim-locust.fullname" . }}-master
+        ports:
+        - name: worker
+          containerPort: 5557
+        volumeMounts:
+        - name: timeline
+          mountPath: /data
+          readOnly: true
+        resources:
+          {{- toYaml .Values.locust.worker.resources | nindent 10 }}
+      volumes:
+      - name: timeline
+        {{- if .Values.timeline.hostPath }}
+        hostPath:
+          path: {{ .Values.timeline.hostPath }}
+          type: Directory
+        {{- else if .Values.timeline.inline }}
+        configMap:
+          name: {{ include "modsim-locust.fullname" . }}-timeline
+        {{- else }}
+        emptyDir: {}
+        {{- end }}

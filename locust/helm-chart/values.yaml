@@ -1,0 +1,62 @@
+image:
+  repository: modsim-locust
+  tag: latest
+  pullPolicy: IfNotPresent
+
+locust:
+  master:
+    replicas: 1
+    resources:
+      requests:
+        cpu: 500m
+        memory: 512Mi
+      limits:
+        cpu: 1000m
+        memory: 1Gi
+
+  worker:
+    replicas: 5
+    resources:
+      requests:
+        cpu: 1000m
+        memory: 1Gi
+      limits:
+        cpu: 2000m
+        memory: 2Gi
+
+# Transport configuration
+transport:
+  # "rest" | "native" | "udl"
+  mode: rest
+  # Native Zenoh router endpoint (only for mode: native)
+  zenohRouter: "tcp/localhost:7447"
+
+# UDL credentials (create a Secret named "udl-credentials" with these keys)
+udl:
+  secretName: udl-credentials
+  baseUrl: ""  # required for mode: udl
+  classification: ""  # required for mode: udl
+
+# Timeline configuration
+timeline:
+  # Path inside the container where timeline is mounted
+  path: /data/timeline.jsonl
+  # Option 1: Embed small timeline in ConfigMap (< 1MB)
+  inline: ""
+  # Option 2: HostPath mount for large files (Kind/local dev)
+  hostPath: ""
+
+# Backend configuration (used for REST transport --host flag)
+backend:
+  host: "http://backend-service.default.svc.cluster.local:8080"
+
+# Test configuration
+test:
+  users: 51
+  spawnRate: 5
+  runTime: 59m
+  headless: false
+
+service:
+  type: ClusterIP
+  port: 8089

@@ -1,0 +1,113 @@
+name: "PLA saturation \u2014 200 fixed-wing from vehicle launch"
+area:
+  width_km: 3.0
+  height_km: 2.0
+dt: 1.0
+duration: 600
+seed: 48
+
+# Geographic reference point (Southeast China coast)
+reference_origin:
+  - 24.5  # latitude
+  - 118.0  # longitude
+
+detection:
+  mode: probabilistic
+  range: 0.8
+  pd_function: exponential
+  pd_half_range: 0.5
+groups:
+- group_id: salvo_1
+  count: 48
+  mode: swarm
+  heading:
+  - 1.0
+  - 0.0
+  speed_min: 0.02
+  speed_max: 0.035
+  spawn_center:
+  - 0.1
+  - 1.0
+  spawn_radius: 0.05
+  spacing_profile: gaussian
+  spawn_altitude: 0.200
+  spawn_altitude_range: 0.150
+- group_id: salvo_2
+  count: 48
+  mode: swarm
+  heading:
+  - 1.0
+  - 0.15
+  speed_min: 0.02
+  speed_max: 0.035
+  spawn_center:
+  - 0.15
+  - 1.0
+  spawn_radius: 0.05
+  spacing_profile: gaussian
+  spawn_altitude: 0.200
+  spawn_altitude_range: 0.150
+- group_id: flank_south
+  count: 48
+  mode: swarm
+  heading:
+  - 0.9
+  - 0.5
+  speed_min: 0.025
+  speed_max: 0.04
+  spawn_center:
+  - 0.1
+  - 0.3
+  spawn_radius: 0.05
+  spacing_profile: gaussian
+  spawn_altitude: 0.200
+  spawn_altitude_range: 0.150
+- group_id: flank_north
+  count: 56
+  mode: swarm
+  heading:
+  - 0.9
+  - -0.4
+  speed_min: 0.025
+  speed_max: 0.04
+  spawn_center:
+  - 0.1
+  - 1.7
+  spawn_radius: 0.05
+  spacing_profile: gaussian
+  spawn_altitude: 0.200
+  spawn_altitude_range: 0.150
+sensors:
+  layout: manual
+  detection_range: 0.8
+  positions:
+  - - 1.0
+    - 0.5
+    - 0.005
+  - - 1.0
+    - 1.0
+    - 0.005
+  - - 1.0
+    - 1.5
+    - 0.005
+  - - 1.8
+    - 0.3
+    - 0.005
+  - - 1.8
+    - 0.8
+    - 0.005
+  - - 1.8
+    - 1.3
+    - 0.005
+  - - 1.8
+    - 1.8
+    - 0.005
+  - - 2.5
+    - 0.6
+    - 0.005
+  - - 2.5
+    - 1.0
+    - 0.005
+  - - 2.5
+    - 1.4
+    - 0.005

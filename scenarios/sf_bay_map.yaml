@@ -1,0 +1,39 @@
+name: San Francisco Bay Drone Monitoring
+area:
+  width_km: 15.0
+  height_km: 12.0
+dt: 1.0
+duration: 120
+seed: 42
+
+# Geographic reference point (San Francisco)
+reference_origin:
+  - 37.7749  # latitude
+  - -122.4194  # longitude
+
+detection:
+  mode: binary
+  range: 3.0
+
+groups:
+- group_id: coastal_patrol
+  count: 20
+  mode: swarm
+  heading:
+  - 0.7
+  - 0.7
+  speed_min: 0.03
+  speed_max: 0.06
+  spawn_center:
+  - 2.0
+  - 2.0
+  spawn_radius: 1.5
+  spacing_profile: gaussian
+  spawn_altitude: 0.150
+  spawn_altitude_range: 0.050
+
+sensors:
+  layout: grid
+  detection_range: 3.0
+  spacing: 4.0
+  altitude: 0.010

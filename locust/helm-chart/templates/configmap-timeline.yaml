@@ -1,0 +1,12 @@
+{{- if .Values.timeline.inline }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "modsim-locust.fullname" . }}-timeline
+  labels:
+    {{- include "modsim-locust.labels" . | nindent 4 }}
+data:
+  {{- /* Derive filename from timeline.path (e.g. /data/timeline.jsonl -> timeline.jsonl) */}}
+  {{ base .Values.timeline.path }}: |
+    {{ .Values.timeline.inline | nindent 4 }}
+{{- end }}

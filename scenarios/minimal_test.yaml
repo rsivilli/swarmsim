@@ -1,0 +1,57 @@
+name: "Minimal pipeline test — 1 drone, 1 sensor, boolean detection"
+area:
+  width_km: 10.0
+  height_km: 10.0
+dt: 0.1
+duration: 120
+seed: 42
+
+detection:
+  mode: binary
+  range: 3.0
+
+groups:
+- group_id: single_drone
+  count: 1
+  mode: swarm
+  heading:
+  - 1.0
+  - 0.0
+  speed_min: 0.04
+  speed_max: 0.04
+  spawn_center:
+  - 1.0
+  - 5.0
+  spawn_radius: 0.0
+  spacing_profile: random
+  spawn_altitude: 0.100
+  spawn_altitude_range: 0.0
+
+sensors:
+  layout: manual
+  detection_range: 3.0
+  positions:
+  - - 5.0
+    - 5.0
+    - 0.010
+
+communication:
+  enabled: true
+  reference_origin:
+  - 38.8353
+  - -104.8216
+  topology:
+    bundling_mode: none
+    transport: zenoh
+  strategy:
+    name: direct_zenoh
+    protocol: zenoh_pubsub
+    bundling: false
+  sensor_metadata:
+  - sensor_idx: 0
+    sensor_id: TEST-RADAR-01
+    asset: TEST-TOWER
+    asset_nat: US
+    sen_type: RADAR
+    network_tier: 0
+    relay_parent: null

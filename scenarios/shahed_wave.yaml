@@ -1,0 +1,119 @@
+name: "Shahed-scale saturation \u2014 750 one-way attack drones"
+area:
+  width_km: 50.0
+  height_km: 30.0
+dt: 5.0
+duration: 3600
+seed: 750
+
+# Geographic reference point (Persian Gulf region)
+reference_origin:
+  - 27.4138  # latitude
+  - 53.8478  # longitude
+
+detection:
+  mode: probabilistic
+  range: 8.0
+  pd_function: exponential
+  pd_half_range: 5.0
+groups:
+- group_id: wave_south
+  count: 300
+  mode: swarm
+  heading:
+  - 0.0
+  - 1.0
+  speed_min: 0.045
+  speed_max: 0.055
+  spawn_center:
+  - 25.0
+  - 0.5
+  spawn_radius: 8.0
+  spacing_profile: random
+  spawn_altitude: 0.100
+  spawn_altitude_range: 0.100
+- group_id: wave_sw
+  count: 200
+  mode: swarm
+  heading:
+  - 0.4
+  - 1.0
+  speed_min: 0.045
+  speed_max: 0.055
+  spawn_center:
+  - 10.0
+  - 0.5
+  spawn_radius: 5.0
+  spacing_profile: random
+  spawn_altitude: 0.100
+  spawn_altitude_range: 0.100
+- group_id: wave_se
+  count: 200
+  mode: swarm
+  heading:
+  - -0.3
+  - 1.0
+  speed_min: 0.045
+  speed_max: 0.055
+  spawn_center:
+  - 40.0
+  - 0.5
+  spawn_radius: 5.0
+  spacing_profile: random
+  spawn_altitude: 0.100
+  spawn_altitude_range: 0.100
+- group_id: decoys
+  count: 50
+  mode: swarm
+  heading:
+  - 0.0
+  - 1.0
+  speed_min: 0.06
+  speed_max: 0.08
+  spawn_center:
+  - 25.0
+  - 0.5
+  spawn_radius: 3.0
+  spacing_profile: gaussian
+  spawn_altitude: 0.100
+  spawn_altitude_range: 0.100
+sensors:
+  layout: manual
+  detection_range: 8.0
+  positions:
+  - - 8.0
+    - 8.0
+    - 0.010
+  - - 18.0
+    - 7.0
+    - 0.010
+  - - 28.0
+    - 6.0
+    - 0.010
+  - - 38.0
+    - 7.0
+    - 0.010
+  - - 5.0
+    - 15.0
+    - 0.010
+  - - 15.0
+    - 14.0
+    - 0.010
+  - - 25.0
+    - 15.0
+    - 0.010
+  - - 35.0
+    - 14.0
+    - 0.010
+  - - 45.0
+    - 15.0
+    - 0.010
+  - - 15.0
+    - 22.0
+    - 0.010
+  - - 25.0
+    - 22.0
+    - 0.010
+  - - 35.0
+    - 22.0
+    - 0.010

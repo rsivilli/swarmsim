@@ -1,0 +1,98 @@
+name: "DARPA OFFSET \u2014 autonomous swarm through urban sensor net"
+area:
+  width_km: 1.0
+  height_km: 0.8
+dt: 1.0
+duration: 900
+seed: 2022
+
+# Geographic reference point (Fort Benning, Georgia - DARPA testing site)
+reference_origin:
+  - 32.3414  # latitude
+  - -84.8772  # longitude
+
+detection:
+  mode: probabilistic
+  range: 0.25
+  pd_function: sigmoid
+  pd_half_range: 0.18
+groups:
+- group_id: recon_quad
+  count: 150
+  mode: swarm
+  heading:
+  - 1.0
+  - 0.2
+  speed_min: 0.003
+  speed_max: 0.005
+  spawn_center:
+  - 0.05
+  - 0.4
+  spawn_radius: 0.1
+  spacing_profile: random
+  spawn_altitude: 0.150
+  spawn_altitude_range: 0.080
+- group_id: fixedwing
+  count: 50
+  mode: swarm
+  heading:
+  - 1.0
+  - -0.1
+  speed_min: 0.015
+  speed_max: 0.025
+  spawn_center:
+  - 0.05
+  - 0.5
+  spawn_radius: 0.08
+  spacing_profile: random
+  spawn_altitude: 0.150
+  spawn_altitude_range: 0.080
+- group_id: wave2
+  count: 50
+  mode: swarm
+  heading:
+  - 0.8
+  - 0.6
+  speed_min: 0.004
+  speed_max: 0.006
+  spawn_center:
+  - 0.05
+  - 0.1
+  spawn_radius: 0.06
+  spacing_profile: gaussian
+  spawn_altitude: 0.150
+  spawn_altitude_range: 0.080
+sensors:
+  layout: manual
+  detection_range: 0.25
+  positions:
+  - - 0.25
+    - 0.2
+    - 0.010
+  - - 0.25
+    - 0.6
+    - 0.010
+  - - 0.5
+    - 0.1
+    - 0.010
+  - - 0.5
+    - 0.4
+    - 0.010
+  - - 0.5
+    - 0.7
+    - 0.010
+  - - 0.75
+    - 0.2
+    - 0.010
+  - - 0.75
+    - 0.5
+    - 0.010
+  - - 0.75
+    - 0.7
+    - 0.010
+  - - 0.9
+    - 0.3
+    - 0.010
+  - - 0.9
+    - 0.6
+    - 0.010

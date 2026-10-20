@@ -1,0 +1,37 @@
+name: "Mass swarm \u2014 500 objects vs sparse hex sensors"
+area:
+  width_km: 20.0
+  height_km: 20.0
+dt: 1.0
+duration: 400
+seed: 7
+
+# Geographic reference point (generic)
+reference_origin:
+  - 40.0  # latitude
+  - -100.0  # longitude
+
+detection:
+  mode: binary
+  range: 4.0
+groups:
+- group_id: wave
+  count: 500
+  mode: swarm
+  heading:
+  - 1.0
+  - 0.0
+  speed_min: 0.03
+  speed_max: 0.1
+  spawn_center:
+  - 1.0
+  - 10.0
+  spawn_radius: 4.0
+  spacing_profile: gaussian
+  spawn_altitude: 0.300
+  spawn_altitude_range: 0.150
+sensors:
+  layout: hex
+  detection_range: 4.0
+  spacing: 5.0
+  altitude: 0.010

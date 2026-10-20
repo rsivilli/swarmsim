@@ -1,0 +1,137 @@
+name: "Hellscape \u2014 10,000 attritable UAS saturating a strait"
+area:
+  width_km: 130.0
+  height_km: 40.0
+dt: 5.0
+duration: 3600
+seed: 2028
+
+# Geographic reference point (Taiwan Strait)
+reference_origin:
+  - 25.0  # latitude
+  - 120.0  # longitude
+
+detection:
+  mode: probabilistic
+  range: 10.0
+  pd_function: exponential
+  pd_half_range: 6.0
+groups:
+- group_id: north_launch
+  count: 3000
+  mode: swarm
+  heading:
+  - 0.0
+  - -1.0
+  speed_min: 0.03
+  speed_max: 0.06
+  spawn_center:
+  - 65.0
+  - 39.0
+  spawn_radius: 30.0
+  spacing_profile: random
+  spawn_altitude: 0.400
+  spawn_altitude_range: 0.250
+- group_id: south_launch
+  count: 3000
+  mode: swarm
+  heading:
+  - 0.0
+  - 1.0
+  speed_min: 0.03
+  speed_max: 0.06
+  spawn_center:
+  - 65.0
+  - 1.0
+  spawn_radius: 30.0
+  spacing_profile: random
+  spawn_altitude: 0.400
+  spawn_altitude_range: 0.250
+- group_id: east_island
+  count: 2000
+  mode: swarm
+  heading:
+  - -1.0
+  - 0.0
+  speed_min: 0.035
+  speed_max: 0.065
+  spawn_center:
+  - 128.0
+  - 20.0
+  spawn_radius: 8.0
+  spacing_profile: gaussian
+  spawn_altitude: 0.400
+  spawn_altitude_range: 0.250
+- group_id: west_dispersed
+  count: 2000
+  mode: swarm
+  heading:
+  - 1.0
+  - 0.0
+  speed_min: 0.035
+  speed_max: 0.065
+  spawn_center:
+  - 2.0
+  - 20.0
+  spawn_radius: 10.0
+  spacing_profile: gaussian
+  spawn_altitude: 0.400
+  spawn_altitude_range: 0.250
+sensors:
+  layout: manual
+  detection_range: 10.0
+  positions:
+  - - 50.0
+    - 20.0
+    - 0.015
+  - - 55.0
+    - 18.0
+    - 0.015
+  - - 55.0
+    - 22.0
+    - 0.015
+  - - 60.0
+    - 20.0
+    - 0.015
+  - - 40.0
+    - 30.0
+    - 0.015
+  - - 50.0
+    - 32.0
+    - 0.015
+  - - 60.0
+    - 30.0
+    - 0.015
+  - - 70.0
+    - 32.0
+    - 0.015
+  - - 80.0
+    - 30.0
+    - 0.015
+  - - 40.0
+    - 10.0
+    - 0.015
+  - - 50.0
+    - 8.0
+    - 0.015
+  - - 60.0
+    - 10.0
+    - 0.015
+  - - 70.0
+    - 8.0
+    - 0.015
+  - - 80.0
+    - 10.0
+    - 0.015
+  - - 30.0
+    - 15.0
+    - 0.015
+  - - 30.0
+    - 25.0
+    - 0.015
+  - - 90.0
+    - 15.0
+    - 0.015
+  - - 90.0
+    - 25.0
+    - 0.015

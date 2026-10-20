@@ -1,0 +1,87 @@
+name: "Pincer \u2014 three swarms converge on sensor cluster"
+area:
+  width_km: 12.0
+  height_km: 12.0
+dt: 1.0
+duration: 200
+seed: 55
+
+# Geographic reference point (generic)
+reference_origin:
+  - 40.0  # latitude
+  - -100.0  # longitude
+
+detection:
+  mode: binary
+  range: 2.0
+groups:
+- group_id: north
+  count: 40
+  mode: swarm
+  heading:
+  - 0.0
+  - -1.0
+  speed_min: 0.04
+  speed_max: 0.06
+  spawn_center:
+  - 6.0
+  - 11.5
+  spawn_radius: 2.0
+  spacing_profile: random
+  spawn_altitude: 0.220
+  spawn_altitude_range: 0.100
+- group_id: west
+  count: 40
+  mode: swarm
+  heading:
+  - 1.0
+  - -0.3
+  speed_min: 0.04
+  speed_max: 0.06
+  spawn_center:
+  - 0.5
+  - 7.0
+  spawn_radius: 1.5
+  spacing_profile: random
+  spawn_altitude: 0.220
+  spawn_altitude_range: 0.100
+- group_id: south
+  count: 40
+  mode: swarm
+  heading:
+  - 0.2
+  - 1.0
+  speed_min: 0.04
+  speed_max: 0.06
+  spawn_center:
+  - 4.0
+  - 0.5
+  spawn_radius: 2.0
+  spacing_profile: random
+  spawn_altitude: 0.220
+  spawn_altitude_range: 0.100
+sensors:
+  layout: manual
+  detection_range: 2.0
+  positions:
+  - - 5.0
+    - 5.0
+    - 0.008
+  - - 6.0
+    - 5.0
+    - 0.008
+  - - 7.0
+    - 5.0
+    - 0.008
+  - - 5.5
+    - 5.87
+    - 0.008
+  - - 6.5
+    - 5.87
+    - 0.008
+  - - 5.5
+    - 4.13
+    - 0.008
+  - - 6.5
+    - 4.13
+    - 0.008

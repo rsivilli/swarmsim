@@ -1,0 +1,145 @@
+name: "DDP 2028 \u2014 50,000 attritable drones vs layered defense"
+area:
+  width_km: 200.0
+  height_km: 80.0
+dt: 10.0
+duration: 3600
+seed: 2028
+
+# Geographic reference point (Western Pacific)
+reference_origin:
+  - 24.297544 # latitude
+  - 119.561316  # longitude
+
+detection:
+  mode: probabilistic
+  range: 15.0
+  pd_function: exponential
+  pd_half_range: 9.0
+groups:
+- group_id: recon_echelon
+  count: 5000
+  mode: swarm
+  heading:
+  - 1.0
+  - 0.0
+  speed_min: 0.06
+  speed_max: 0.09
+  spawn_center:
+  - 5.0
+  - 40.0
+  spawn_radius: 20.0
+  spacing_profile: random
+  spawn_altitude: 0.450
+  spawn_altitude_range: 0.300
+- group_id: main_north
+  count: 15000
+  mode: swarm
+  heading:
+  - 1.0
+  - -0.1
+  speed_min: 0.035
+  speed_max: 0.055
+  spawn_center:
+  - 5.0
+  - 55.0
+  spawn_radius: 15.0
+  spacing_profile: random
+  spawn_altitude: 0.450
+  spawn_altitude_range: 0.300
+- group_id: main_south
+  count: 15000
+  mode: swarm
+  heading:
+  - 1.0
+  - 0.1
+  speed_min: 0.035
+  speed_max: 0.055
+  spawn_center:
+  - 5.0
+  - 25.0
+  spawn_radius: 15.0
+  spacing_profile: random
+  spawn_altitude: 0.450
+  spawn_altitude_range: 0.300
+- group_id: reserve
+  count: 15000
+  mode: swarm
+  heading:
+  - 1.0
+  - 0.0
+  speed_min: 0.03
+  speed_max: 0.045
+  spawn_center:
+  - 2.0
+  - 40.0
+  spawn_radius: 20.0
+  spacing_profile: random
+  spawn_altitude: 0.450
+  spawn_altitude_range: 0.300
+communication:
+  enabled: true
+  topology:
+    bundling_mode: direct
+    transport: zenoh
+    bundle_window_sec: 1.0
+  strategy:
+    name: direct
+    protocol: zenoh_pubsub
+    bundling: false
+
+sensors:
+  layout: manual
+  detection_range: 15.0
+  positions:
+  - - 50.0
+    - 10.0
+    - 0.020
+  - - 50.0
+    - 25.0
+    - 0.020
+  - - 50.0
+    - 40.0
+    - 0.020
+  - - 50.0
+    - 55.0
+    - 0.020
+  - - 50.0
+    - 70.0
+    - 0.020
+  - - 100.0
+    - 5.0
+    - 0.020
+  - - 100.0
+    - 16.0
+    - 0.020
+  - - 100.0
+    - 27.0
+    - 0.020
+  - - 100.0
+    - 38.0
+    - 0.020
+  - - 100.0
+    - 49.0
+    - 0.020
+  - - 100.0
+    - 60.0
+    - 0.020
+  - - 100.0
+    - 71.0
+    - 0.020
+  - - 150.0
+    - 20.0
+    - 0.020
+  - - 150.0
+    - 40.0
+    - 0.020
+  - - 150.0
+    - 60.0
+    - 0.020
+  - - 180.0
+    - 30.0
+    - 0.020
+  - - 180.0
+    - 50.0
+    - 0.020

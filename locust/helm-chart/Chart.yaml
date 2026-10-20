@@ -1,0 +1,5 @@
+apiVersion: v2
+name: modsim-locust
+description: Locust load testing for modsim communication strategies
+version: 0.1.0
+appVersion: "1.0"

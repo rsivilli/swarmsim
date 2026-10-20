@@ -1,0 +1,64 @@
+name: Tight formation through sensor corridor
+area:
+  width_km: 15.0
+  height_km: 5.0
+dt: 1.0
+duration: 300
+seed: 123
+detection:
+  mode: probabilistic
+  range: 2.5
+  pd_function: exponential
+  pd_half_range: 1.5
+groups:
+- group_id: bravo
+  count: 8
+  mode: formation
+  heading:
+  - 1.0
+  - 0.0
+  speed: 0.05
+  spawn_center:
+  - 1.0
+  - 2.5
+  spawn_radius: 0.3
+  spacing_profile: uniform
+  spawn_altitude: 0.200
+  spawn_altitude_range: 0.100
+- group_id: charlie
+  count: 15
+  mode: swarm
+  heading:
+  - 1.0
+  - 0.1
+  speed_min: 0.03
+  speed_max: 0.06
+  spawn_center:
+  - 0.5
+  - 3.5
+  spawn_radius: 0.8
+  spacing_profile: random
+  spawn_altitude: 0.200
+  spawn_altitude_range: 0.100
+sensors:
+  layout: manual
+  detection_range: 2.5
+  positions:
+  - - 4.0
+    - 1.5
+    - 0.012
+  - - 4.0
+    - 3.5
+    - 0.012
+  - - 7.0
+    - 2.5
+    - 0.012
+  - - 10.0
+    - 1.0
+    - 0.012
+  - - 10.0
+    - 4.0
+    - 0.012
+  - - 13.0
+    - 2.5
+    - 0.012
