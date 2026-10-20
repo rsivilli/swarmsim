@@ -78,11 +78,3 @@ class TestCLI:
         bad_file.write_text("invalid: yaml: syntax:")
         result = cli_runner.invoke(cli, ["validate", str(bad_file)])
         assert result.exit_code != 0
-
-    def test_export_command_help(self, cli_runner):
-        """Export command should have help."""
-        result = cli_runner.invoke(cli, ["export", "--help"])
-        assert result.exit_code == 0
-        assert "input" in result.output.lower()
-        assert "output" in result.output.lower()
-        assert "--format" in result.output

@@ -37,13 +37,18 @@ udl:
   baseUrl: ""  # required for mode: udl
   classification: ""  # required for mode: udl
 
-# Timeline configuration
+# Timeline configuration. Set exactly one source; hostPath wins, then
+# existingConfigMap, then inline. With none set, pods start with an empty /data.
 timeline:
-  # Path inside the container where timeline is mounted
+  # Path inside the container where timeline is mounted. The file name must match
+  # the key in the ConfigMap (e.g. /data/timeline.json -> key "timeline.json").
   path: /data/timeline.jsonl
-  # Option 1: Embed small timeline in ConfigMap (< 1MB)
+  # Option 1: Mount a ConfigMap you created yourself (< 1MiB), e.g.
+  #   kubectl create configmap locust-timeline --from-file=timeline.jsonl=output/run_comms.jsonl
+  existingConfigMap: ""
+  # Option 2: Embed small timeline in a chart-managed ConfigMap (< 1MiB)
   inline: ""
-  # Option 2: HostPath mount for large files (Kind/local dev)
+  # Option 3: HostPath mount for large files (Kind/local dev)
   hostPath: ""
 
 # Backend configuration (used for REST transport --host flag)

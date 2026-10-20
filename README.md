@@ -70,25 +70,28 @@ uv run modsim run scenarios/mothership_salvo.yaml --map-style satellite --animat
 ### 2. Run Locust locally
 
 ```bash
-cd locust
-
 # Build the Locust container
-docker build -t modsim-locust:latest .
+docker build -t modsim-locust:latest locust/
 
 # Run against a local backend
 docker run -p 8089:8089 \
-  -v $(pwd)/../output/mothership_salvo_comms.json:/timeline.json \
-  -e BACKEND_HOST=http://host.docker.internal:8080 \
+  -v $(pwd)/output/mothership_salvo_comms.json:/data/timeline.json \
+  -e TIMELINE_PATH=/data/timeline.json \
   modsim-locust:latest \
   locust -f /locust/locustfile.py --host=http://host.docker.internal:8080
 
 # Open http://localhost:8089
 ```
 
+`TIMELINE_PATH` must match where you mount the file; its extension (`.json` or `.jsonl`) selects the parser.
+
 ### 3. Deploy Locust to Kubernetes
 
+No prebuilt image is published yet, so build `modsim-locust:latest` and make it available to your cluster first (e.g. `kind load docker-image modsim-locust:latest`, or push it to your own registry and set `image.repository`).
+
 ```bash
-# Create ConfigMap with the timeline
+# Create ConfigMap with the timeline (the generated values mount the
+# "locust-timeline" ConfigMap at /data/timeline.json)
 kubectl create configmap locust-timeline \
   --from-file=timeline.json=output/mothership_salvo_comms.json
 
@@ -104,6 +107,8 @@ kubectl port-forward svc/modsim-loadtest-modsim-locust-master 8089:8089
 
 The generated Helm values include recommended worker counts, user counts, spawn rate, and run time derived from the simulation's message rate and duration.
 
+ConfigMaps are limited to 1MiB. For larger timelines, see [locust/README.md](locust/README.md#large-timelines--1mib).
+
 ## Transport Modes
 
 Locust supports three transport backends, selected via the `ZENOH_TRANSPORT` env var:
@@ -117,14 +122,16 @@ Locust supports three transport backends, selected via the `ZENOH_TRANSPORT` env
 ```bash
 # Native Zenoh example
 docker run -p 8089:8089 \
-  -v $(pwd)/output/mothership_salvo_comms.json:/timeline.json \
+  -v $(pwd)/output/mothership_salvo_comms.json:/data/timeline.json \
+  -e TIMELINE_PATH=/data/timeline.json \
   -e ZENOH_TRANSPORT=native \
   -e ZENOH_ROUTER=tcp/zenoh-router:7447 \
   modsim-locust:latest locust -f /locust/locustfile.py
 
 # UDL example
 docker run -p 8089:8089 \
-  -v $(pwd)/output/mothership_salvo_comms.json:/timeline.json \
+  -v $(pwd)/output/mothership_salvo_comms.json:/data/timeline.json \
+  -e TIMELINE_PATH=/data/timeline.json \
   -e ZENOH_TRANSPORT=udl \
   -e UDL_AUTH_USERNAME=user \
   -e UDL_AUTH_PASSWORD=pass \
@@ -258,6 +265,26 @@ communication:
 | `ddp_50k.yaml` | 50,000 | 17 | DoD Drone Dominance Program — 50,000 drones across a 200km x 80km theater |
 | `shahed_wave.yaml` | 750 | 12 | Russia's record single-night Shahed wave (750 drones) |
 
+### Other Bundled Scenarios
+
+| Scenario | Objects | Exercises |
+|----------|---------|-----------|
+| `minimal_test.yaml` | 1 | Smallest end-to-end pipeline check (1 drone, 1 sensor) |
+| `basic_grid.yaml` | 30 | Grid sensor layout vs a loose swarm |
+| `corridor.yaml` | 23 | Tight formation through a manual sensor corridor |
+| `needle_thread.yaml` | 12 | Formation through a narrow sensor gap |
+| `fast_dash.yaml` | 5 | High-speed formation through a dense field |
+| `pincer.yaml` | 120 | Three swarms converging on a sensor cluster |
+| `mass_swarm.yaml` | 500 | Large swarm vs sparse hex sensors |
+| `comms_test.yaml` | 50 | Communication emulation (bundled relay) |
+| `sf_bay_map.yaml` | 20 | Geographic projection and map tiles |
+| `darpa_offset.yaml` | 250 | DARPA OFFSET-style swarm through an urban sensor net |
+| `pla_saturation.yaml` | 200 | Fixed-wing saturation from vehicle launch |
+| `dubai_canvas.yaml` | 1,000 | Drone light show "pixel canvas" |
+| `tokyo_olympics.yaml` | 1,824 | Drone light show morphing over a stadium |
+| `guinness_10k.yaml` | 10,000 | Record-scale light show over a hex grid |
+| `ddp_50k_short.yaml` | 50,000 | Shorter run of `ddp_50k.yaml` for quicker iteration |
+
 ### Scaling Reference
 
 Benchmarked on Apple Silicon. Scaling is roughly linear in `objects * sensors * steps`.
@@ -307,14 +334,18 @@ For large simulations (>50k objects), use the JSONL streaming format by specifyi
 
 ```
 modsim/
-  cli.py          Click CLI (run, validate, export, helm-values, version)
-  config.py       YAML loading + validation
+  cli.py          Click CLI (run, validate, helm-values, animate-all, version)
+  config.py       YAML loading
+  validators.py   Scenario structure validation
+  errors.py       Exception types
   models.py       Dataclasses, enums, Vec2/Vec3
+  geo.py          km <-> lat/lon projection around reference_origin
   motion.py       Object spawning + per-timestep motion
   detection.py    NumPy-accelerated pairwise distance, binary + probabilistic Pd
   sim.py          Simulation loop
   report.py       Console summary + JSON export
   viz.py          Static matplotlib plot + FuncAnimation
+  utils.py        Formatting helpers
   comm/
     track_manager.py    Track ID management and state machine
     track_messages.py   Track.json message generation
@@ -346,7 +377,9 @@ uv run ruff format .
 for f in scenarios/*.yaml; do uv run modsim validate "$f"; done
 ```
 
-CI runs lint and the test suite on Python 3.11 and 3.14, and validates every bundled scenario.
+CI runs lint and the test suite on Python 3.11 and 3.14, validates every bundled scenario, lints and renders the Helm chart, and builds the Locust image.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for how to propose changes and [SECURITY.md](SECURITY.md) for reporting vulnerabilities.
 
 ## License
 
