@@ -12,144 +12,99 @@ This directory contains:
 
 ## Quick Start
 
+All commands below run from the repository root.
+
 ### 1. Generate Timeline and Helm Values
 
-The new streamlined workflow automatically generates both the timeline and deployment configuration:
-
 ```bash
-# One-step: Generate timeline + Helm values
-modsim run examples/comms_test.yaml \
+# One step: generate the timeline + Helm values
+uv run modsim run scenarios/comms_test.yaml \
   --no-viz --export-mode comms --helm-values
 
 # This creates:
-#   - output/comms_test_comms.json (timeline)
-#   - output/comms_test_comms_values.yaml (Helm values)
+#   - output/comms_test_comms.json         (timeline)
+#   - output/comms_test_comms_values.yaml  (Helm values)
 ```
 
 The generated Helm values include:
-- Communication configuration (strategy, topology, bundling)
-- Recommended deployment parameters (users, workers, spawn rate)
+- Recommended deployment parameters (users, workers, spawn rate, run time)
 - Backend configuration
-- Test duration and statistics
+- Timeline mount settings pointing at a `locust-timeline` ConfigMap
 
 **Alternatively**, generate Helm values from an existing timeline:
 
 ```bash
-modsim helm-values output/comms_test_comms.json -o my-values.yaml
+uv run modsim helm-values output/comms_test_comms.json -o my-values.yaml
 ```
 
 ### 2. Local Testing with Docker
 
-Build and run locally:
-
 ```bash
-# Build image
-docker build -t modsim-locust:latest .
+docker build -t modsim-locust:latest locust/
 
-# Run with local timeline
 docker run -p 8089:8089 \
-  -v $(pwd)/../comms_timeline.json:/timeline.json \
-  -e BACKEND_HOST=http://host.docker.internal:8080 \
+  -v $(pwd)/output/comms_test_comms.json:/data/timeline.json \
+  -e TIMELINE_PATH=/data/timeline.json \
   modsim-locust:latest \
   locust -f /locust/locustfile.py --host=http://host.docker.internal:8080
 
-# Open browser to http://localhost:8089
-```
-
-### 3. Kubernetes Deployment
-
-#### Recommended: Automated Workflow
-
-Using the auto-generated values from step 1:
-
-```bash
-# 1. Create ConfigMap with timeline
-kubectl create configmap locust-timeline \
-  --from-file=timeline.json=output/comms_test_comms.json
-
-# 2. Deploy with auto-generated values
-helm install modsim-loadtest ./helm-chart \
-  -f output/comms_test_comms_values.yaml \
-  --set backend.host=http://my-backend-svc.default.svc:8080
-
-# 3. Access UI
-kubectl port-forward svc/modsim-loadtest-modsim-locust-master 8089:8089
 # Open http://localhost:8089
 ```
 
-The auto-generated values already include optimized worker counts, user counts, and other parameters based on your simulation.
+The image defaults to `TIMELINE_PATH=/data/timeline.jsonl`; set `TIMELINE_PATH` to match the file you mount. The extension (`.json` or `.jsonl`) selects the parser.
 
-#### Alternative: Manual ConfigMap Embedding
+### 3. Kubernetes Deployment
 
-For small timelines (<1MB) with custom values:
+No prebuilt image is published yet. Build the image and make it available to your cluster first (e.g. `kind load docker-image modsim-locust:latest`, or push it to your own registry and set `image.repository`).
+
+#### Recommended: Generated Values + ConfigMap
 
 ```bash
-# Embed timeline in values file
-./scripts/embed_timeline.sh output/comms_test_comms.json values-custom.yaml
+# 1. Create a ConfigMap holding the timeline. The key must match the file name
+#    in timeline.path (timeline.json here; timeline.jsonl for a .jsonl export)
+kubectl create configmap locust-timeline \
+  --from-file=timeline.json=output/comms_test_comms.json
 
-# Install Helm chart
-helm install modsim-loadtest ./helm-chart \
-  -f values-custom.yaml \
+# 2. Deploy with the generated values
+helm install modsim-loadtest ./locust/helm-chart \
+  -f output/comms_test_comms_values.yaml \
   --set backend.host=http://my-backend-svc.default.svc:8080
 
-# Access UI
+# 3. Access the UI
 kubectl port-forward svc/modsim-loadtest-modsim-locust-master 8089:8089
 ```
 
-#### Large Timelines (>1MB)
+#### Alternative: Embed the Timeline in a Values File
 
-Use PersistentVolume:
+For small timelines (< 1MiB) when you'd rather not manage a ConfigMap yourself:
 
 ```bash
-# Create PVC
-kubectl apply -f - <<EOF
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: timeline-storage
-spec:
-  accessModes: [ReadOnlyMany]
-  resources:
-    requests:
-      storage: 1Gi
-EOF
+./locust/scripts/embed_timeline.sh output/comms_test_comms.json values-custom.yaml
 
-# Copy timeline to PV
-kubectl run -i --rm --restart=Never timeline-copy --image=busybox \
-  --overrides='
-{
-  "spec": {
-    "containers": [{
-      "name": "timeline-copy",
-      "image": "busybox",
-      "command": ["sh"],
-      "stdin": true,
-      "volumeMounts": [{
-        "name": "timeline",
-        "mountPath": "/mnt/timeline"
-      }]
-    }],
-    "volumes": [{
-      "name": "timeline",
-      "persistentVolumeClaim": {
-        "claimName": "timeline-storage"
-      }
-    }]
-  }
-}' < ../comms_timeline.json > /mnt/timeline/timeline.json
-
-# Install with PV
-helm install modsim-loadtest ./helm-chart \
-  --set timeline.externalPath=/mnt/timeline/timeline.json \
+helm install modsim-loadtest ./locust/helm-chart \
+  -f values-custom.yaml \
   --set backend.host=http://my-backend-svc.default.svc:8080
 ```
+
+#### Large Timelines (> 1MiB)
+
+ConfigMaps are capped at 1MiB. For larger timelines, mount a directory from the node with `timeline.hostPath` (suited to single-node clusters such as kind, where you control the node filesystem):
+
+```bash
+helm install modsim-loadtest ./locust/helm-chart \
+  --set timeline.hostPath=/data/timelines \
+  --set timeline.path=/data/timeline.jsonl \
+  --set backend.host=http://my-backend-svc.default.svc:8080
+```
+
+The directory must contain a file with the same name as `timeline.path`.
 
 ## Configuration
 
 ### values.yaml Options
 
 ```yaml
-# Backend target
+# Backend target (REST transport)
 backend:
   host: "http://backend-service.default.svc.cluster.local:8080"
 
@@ -165,16 +120,18 @@ test:
   runTime: 300s
   headless: false  # Set true for CI/CD
 
-# Timeline storage
+# Timeline source: set one of existingConfigMap, inline or hostPath
 timeline:
-  inline: ""  # Embed JSON directly
-  externalPath: ""  # Or use PV mount path
+  path: /data/timeline.jsonl
+  existingConfigMap: ""
+  inline: ""
+  hostPath: ""
 ```
 
 ### Environment Variables
 
-- `TIMELINE_PATH` - Path to timeline JSON (default: `/timeline.json`)
-- `BACKEND_HOST` - Backend service URL
+- `TIMELINE_PATH` - Path to the timeline inside the container (image default: `/data/timeline.jsonl`)
+- `ZENOH_TRANSPORT` - `rest` (default), `native` or `udl`; see [Transport Modes](../README.md#transport-modes)
 
 ## Architecture
 
@@ -185,33 +142,23 @@ Timeline JSON → Locust Master → Workers → Backend
 ```
 
 - **Master**: Coordinates test, serves web UI
-- **Workers**: Execute HTTP requests
+- **Workers**: Publish events using the selected transport
 - **Events**: Assigned deterministically by sensor hash
 
 ## How It Works
 
-1. **Timeline Loading**: JSON loaded at module level for efficiency
+1. **Timeline Loading**: JSON loaded at module level; JSONL streamed lazily per worker
 2. **Event Assignment**: Each user gets events from specific sensors (hash-based)
 3. **Timing**: Best-effort replay at original timestamps
-4. **Transport**: REST primary, Zenoh HTTP bridge optional
+4. **Transport**: Chosen with `ZENOH_TRANSPORT` (REST, native Zenoh or UDL)
 5. **Metrics**: Per-sender/receiver stats in Locust UI
-
-## Transports
-
-### REST (Default)
-
-Events with `transport: "rest_post"` send to `/api/tracks` endpoint.
-
-### Zenoh HTTP Bridge
-
-Events with `transport: "zenoh_pubsub"` send to `/zenoh/pub/{sensor_id}` endpoint.
 
 ## Headless Mode
 
 For CI/CD pipelines:
 
 ```bash
-helm install modsim-loadtest ./helm-chart \
+helm install modsim-loadtest ./locust/helm-chart \
   --set test.headless=true \
   --set test.users=100 \
   --set test.spawnRate=10 \
@@ -232,8 +179,8 @@ curl http://localhost:8089/stats/requests > results.json
 # Uninstall Helm release
 helm uninstall modsim-loadtest
 
-# Delete PVC if used
-kubectl delete pvc timeline-storage
+# Delete the timeline ConfigMap if you created one
+kubectl delete configmap locust-timeline
 ```
 
 ## Troubleshooting
@@ -248,10 +195,10 @@ kubectl logs -l component=worker --tail=50
 
 ### Timeline Not Loading
 
-Verify ConfigMap or PV mount:
+Check that the mounted file name matches `timeline.path`:
 
 ```bash
-kubectl exec -it <master-pod> -- cat /timeline.json
+kubectl exec -it <master-pod> -- sh -c 'echo $TIMELINE_PATH; ls -l /data'
 ```
 
 ### Timing Drift
@@ -275,16 +222,13 @@ Reduce worker replicas or adjust resource limits in values.yaml.
 
 ### Compare Strategies
 
-Run multiple tests with different timelines:
+Generate a timeline per communication strategy and deploy each as its own release. Give each release its own ConfigMap via `--set timeline.existingConfigMap=<name>`:
 
 ```bash
-# Direct REST
-uv run modsim run ../examples/direct_rest.yaml --no-viz --export-mode comms --export direct.json
-helm install direct ./helm-chart -f direct-values.yaml
-
-# Bundled Relay
-uv run modsim run ../examples/bundled_relay.yaml --no-viz --export-mode comms --export bundled.json
-helm install bundled ./helm-chart -f bundled-values.yaml
+uv run modsim run scenarios/comms_test.yaml --no-viz --export-mode comms \
+  --export output/direct.json --helm-values
+kubectl create configmap locust-timeline --from-file=timeline.json=output/direct.json
+helm install direct ./locust/helm-chart -f output/direct_values.yaml
 
 # Compare RPS, latency, errors in Locust UI
 ```
@@ -292,7 +236,7 @@ helm install bundled ./helm-chart -f bundled-values.yaml
 ### Long-Running Test
 
 ```bash
-helm install long-test ./helm-chart \
+helm install long-test ./locust/helm-chart \
   --set test.headless=true \
   --set test.runTime=3600s \
   --set locust.worker.replicas=20
@@ -304,7 +248,7 @@ helm install long-test ./helm-chart \
 2. **Use headless mode** for automated testing
 3. **Monitor backend** - Locust only shows client-side metrics
 4. **Test incrementally** - start small, scale up
-5. **PV for large timelines** - ConfigMap has 1MB etcd limit
+5. **hostPath for large timelines** - ConfigMaps are limited to 1MiB
 
 ## References
 

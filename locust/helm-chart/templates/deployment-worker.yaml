@@ -67,6 +67,9 @@ spec:
         hostPath:
           path: {{ .Values.timeline.hostPath }}
           type: Directory
+        {{- else if .Values.timeline.existingConfigMap }}
+        configMap:
+          name: {{ .Values.timeline.existingConfigMap }}
         {{- else if .Values.timeline.inline }}
         configMap:
           name: {{ include "modsim-locust.fullname" . }}-timeline

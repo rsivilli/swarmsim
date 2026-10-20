@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from modsim.models import DetectionMode, GroupMode, SensorLayout
 from modsim.config import load_scenario
-from conftest import EXAMPLES_DIR
+from conftest import SCENARIOS_DIR
 
 
 class TestConfig:
@@ -12,7 +12,7 @@ class TestConfig:
 
     def test_load_basic_grid(self):
         """Load basic_grid.yaml and verify structure."""
-        cfg = load_scenario(EXAMPLES_DIR / "basic_grid.yaml")
+        cfg = load_scenario(SCENARIOS_DIR / "basic_grid.yaml")
         assert cfg.name == "Grid sensors vs loose swarm"
         assert cfg.area.width_km == 10.0
         assert cfg.area.height_km == 10.0
@@ -24,7 +24,7 @@ class TestConfig:
 
     def test_load_corridor(self):
         """Load corridor.yaml with probabilistic detection and manual sensors."""
-        cfg = load_scenario(EXAMPLES_DIR / "corridor.yaml")
+        cfg = load_scenario(SCENARIOS_DIR / "corridor.yaml")
         assert cfg.detection_mode is DetectionMode.PROBABILISTIC
         assert cfg.sensors is not None
         assert cfg.sensors.layout is SensorLayout.MANUAL

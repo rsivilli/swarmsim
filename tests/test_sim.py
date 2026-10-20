@@ -18,7 +18,7 @@ from modsim.models import (
 from modsim.config import load_scenario
 from modsim.sim import build_sensors, run, run_iter
 from modsim.report import print_summary, export_json
-from conftest import make_group, make_area, small_scenario, EXAMPLES_DIR
+from conftest import make_group, make_area, small_scenario, SCENARIOS_DIR
 
 
 class TestSim:
@@ -131,12 +131,15 @@ class TestReport:
 
 
 # ===========================================================================
-# integration — run every example scenario
+# integration — run small bundled scenarios end to end
 # ===========================================================================
+
+# The full set includes 50k-object runs; CI validates all of them separately
+_FAST_SCENARIOS = ["basic_grid", "corridor", "minimal_test", "needle_thread", "fast_dash"]
 
 
 def _example_yamls():
-    return sorted(EXAMPLES_DIR.glob("*.yaml"))
+    return [SCENARIOS_DIR / f"{name}.yaml" for name in _FAST_SCENARIOS]
 
 
 @pytest.mark.parametrize("yaml_path", _example_yamls(), ids=lambda p: p.stem)

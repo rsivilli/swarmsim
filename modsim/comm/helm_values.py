@@ -6,6 +6,15 @@ import json
 from pathlib import Path
 
 
+# Name of the ConfigMap the generated values expect the timeline to live in
+TIMELINE_CONFIGMAP = "locust-timeline"
+
+
+def _timeline_filename(comms_path: str | Path) -> str:
+    """Return the file name the timeline is mounted as; the extension selects JSON vs JSONL."""
+    return "timeline.jsonl" if str(comms_path).endswith(".jsonl") else "timeline.json"
+
+
 def _load_comms_header(comms_path: str | Path) -> dict:
     """Load metadata from a comms export file (.json or .jsonl).
 
@@ -40,6 +49,7 @@ def generate_helm_values(comms_json_path: str | Path, output_path: str | Path) -
         )
 
     deployment = data["config"]["recommended_deployment"]
+    timeline_file = _timeline_filename(comms_json_path)
     metadata = data.get("metadata", {})
     scenario_name = metadata.get("scenario", "modsim-scenario")
 
@@ -82,11 +92,13 @@ locust:
         memory: 2Gi
 
 # Timeline configuration
+# Create the ConfigMap first (< 1MiB):
+#   kubectl create configmap {TIMELINE_CONFIGMAP} --from-file={timeline_file}=<comms export>
+# For larger timelines, clear existingConfigMap and set hostPath instead.
 timeline:
-  # Embed timeline in ConfigMap (for small timelines < 1MB)
-  inline: ""
-  # For larger timelines, upload to external storage and reference here
-  externalPath: ""
+  path: /data/{timeline_file}
+  existingConfigMap: {TIMELINE_CONFIGMAP}
+  hostPath: ""
 
 # Backend configuration
 backend:
@@ -130,17 +142,18 @@ def print_deployment_instructions(
     print(f"Values written:  {helm_values_path}")
     print("\nNext Steps:")
     print("-" * 70)
-    print("\n1. Copy the timeline JSON to your deployment:")
-    print("   kubectl create configmap locust-timeline \\")
-    print(f"     --from-file=timeline.json={comms_json_path}")
+    timeline_file = _timeline_filename(comms_json_path)
+    print("\n1. Copy the timeline to your cluster:")
+    print(f"   kubectl create configmap {TIMELINE_CONFIGMAP} \\")
+    print(f"     --from-file={timeline_file}={comms_json_path}")
     print("\n2. Deploy Locust using the generated values:")
-    print("   helm install modsim-locust ./locust/helm-chart \\")
+    print("   helm install modsim-loadtest ./locust/helm-chart \\")
     print(f"     -f {helm_values_path}")
     print("\n3. Access the Locust web UI:")
-    print("   kubectl port-forward svc/locust-master 8089:8089")
+    print("   kubectl port-forward svc/modsim-loadtest-modsim-locust-master 8089:8089")
     print("   Open http://localhost:8089")
     print("\n4. (Optional) Run headless load test:")
-    print("   helm upgrade modsim-locust ./locust/helm-chart \\")
+    print("   helm upgrade modsim-loadtest ./locust/helm-chart \\")
     print(f"     -f {helm_values_path} \\")
     print("     --set test.headless=true")
     print("\n" + "=" * 70 + "\n")
