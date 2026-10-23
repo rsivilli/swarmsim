@@ -1,0 +1,21 @@
+id: remote_id_ble
+description: Broadcast Remote ID over Bluetooth legacy advertising (ASTM F3411), all three advertising channels
+waveform: fsk
+bandwidth_hz: 2000000
+power_dbm: 4
+antenna_gain_dbi: 0
+roles: [drone]
+channels_mhz: [2402, 2426, 2480]
+channel_names: ["37", "38", "39"]
+activity:
+  - model: beacon
+    params:
+      interval_s: 0.25
+      burst_s: 0.000376      # 47-byte legacy advertising PDU at 1 Mbps
+      jitter_s: 0.010        # BLE advDelay (0-10 ms)
+      sequence: all
+      channel_gap_s: 0.0005
+calibration: provisional
+sources:
+  - ASTM F3411 Remote ID broadcast requirements (>= 1 Hz message rate)
+  - Bluetooth Core Specification (advertising channels 37/38/39, advDelay, 1M PHY)

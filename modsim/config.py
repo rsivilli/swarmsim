@@ -4,6 +4,8 @@ from pathlib import Path
 
 import yaml
 
+from .rf.config import parse_rf
+
 from .models import (
     Area,
     CommStrategy,
@@ -137,4 +139,5 @@ def load_scenario(path: str | Path) -> ScenarioConfig:
         seed=raw.get("seed"),
         communication=communication,
         reference_origin=reference_origin,
+        rf=parse_rf(raw, raw["duration"]),
     )

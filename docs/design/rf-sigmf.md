@@ -1,6 +1,6 @@
 # Design: RF emitter simulation and SigMF IQ generation
 
-Status: **Draft for review**. No code has been written yet. The open questions from the first draft
+Status: **Phase 0 implemented**; phases 1–5 not started. The open questions from the first draft
 have been resolved (§14).
 
 ## 1. Summary
@@ -475,12 +475,39 @@ framing, TDOA network sensors, a GPU backend, and a Kubernetes job runner.
 
 | Phase | Scope | Exit criteria |
 |---|---|---|
-| **0: Plumbing and truth** | Models, YAML parsing and validation, profile library, controllers, silent drones, Stage A scheduler, link budget, detectability, parquet truth, `--dry-run` sizing | `modsim rf --dry-run` produces truth tables and sizing for a sample scenario; unit tests for path loss, horizon, scheduling |
+| **0: Plumbing and truth** ✅ | Models, YAML parsing and validation, profile library, controllers, silent drones, Stage A scheduler, link budget, detectability, parquet truth, `--dry-run` sizing | `modsim rf --dry-run` produces truth tables and sizing for a sample scenario; unit tests for path loss, horizon, scheduling |
 | **1: Single-channel IQ** | Fixed tuning, noise + FSPL + Doppler, `lora` + `fm` waveforms (ELRS, analog FPV), chunked multiprocess writer, SigMF writer, determinism | Measured in-band SNR matches the link budget within ±0.5 dB; Doppler tone within ±1 Hz; output byte-identical for 1 vs N workers; `sigmf` validation passes; throughput benchmark recorded |
 | **2: Remaining profiles + clutter** | `ofdm` + `fsk` waveforms (DJI, Wi-Fi, Remote ID BLE/Wi-Fi), background RF, CSMA traffic, annotation granularity modes | Spectrogram/occupancy checks per profile against reference shapes; annotations line up with energy in the spectrogram |
 | **3: Arrays and DF** | Array steering, element patterns, calibration error, spatial annotations, multichannel SigMF | A MUSIC/Bartlett estimator in the test suite recovers synthetic bearings within tolerance at high SNR |
 | **4: Realism and tuning modes** | Two-ray, Rician/TDL fading, receiver impairments, AGC/ADC clipping, multi-band and scanning tuning | Fading statistics match the target K-factor; scanning recordings have correct `captures` segments; clipping is counted |
 | **5: Performance** | Template caching, coarse-grid channel, profiling, optional pyFFTW | Benchmarks published in the README next to the existing scaling table |
+
+### Phase 0 implementation notes
+
+Where the Phase 0 code differs from, or adds detail to, the design above:
+
+- **Controllers:** every drone gets its own controller radio (`<obj>/ctl/<profile>`), because real
+  controllers bind 1:1. `placement` (`per_drone`, `per_group` or `{count: N}`) only sets how many
+  operator **sites** those radios share. Both ends of a link share a `link_key`, so hop sequence,
+  slot phase and "random" channel choice agree. With `tlm_ratio: N`, the drone owns every Nth slot
+  (telemetry) and the controller owns the rest.
+- **Profiles** are YAML files in `modsim/rf/profiles/`; each lists its public sources and is marked
+  `calibration: provisional`. A scenario can add or patch profiles under `rf.profiles` (use
+  `base: <id>` to inherit from an existing profile).
+- **Truth tables** are written as `truth/{emitters,emissions,links}.parquet`, falling back to CSV when
+  pyarrow (the `rf` extra) isn't installed. `links` holds only rows above `rf.cull_snr_db`; for a
+  scanning sensor, a row also needs a non-zero `observed_fraction` (the share of the emission that
+  falls inside that band's dwells).
+- **Link budget:** free-space loss, smooth-earth horizon, receiver gain, flat-spectrum band overlap,
+  and noise over the overlapping bandwidth. Two-ray, shadowing and fading remain Phase 4.
+- **CLI:** `modsim rf` currently requires `--dry-run`. `--workers`, `--bands` and the free-space
+  `--force` override arrive with synthesis in Phase 1. `modsim validate` prints the RF summary and the
+  IQ size preflight (as a warning).
+- **Scale check:** 1,000 ELRS + FPV drones (2,000 radios with controllers) against 10 sensors for 30 s
+  gives 4.5 M emissions and 45 M link rows in about 70 s on one core. Most of that time goes to
+  allocation and truth writing, which Phase 5 can optimize.
+- **Example:** `scenarios/rf_fpv_mix.yaml` (FPV/ELRS, DJI, silent drones, background Wi-Fi/BLE; fixed,
+  multi-band DF and scanning sensors).
 
 ## 13. Testing strategy
 

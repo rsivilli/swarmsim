@@ -20,6 +20,7 @@ uv sync
 # Optional extras
 uv sync --extra loadtest   # Locust, Zenoh, and the Zenoh monitor
 uv sync --extra udl        # Unified Data Library (UDL) transport for Locust
+uv sync --extra rf         # pyarrow for Parquet RF truth tables (modsim rf)
 ```
 
 ## Quickstart
@@ -152,6 +153,10 @@ modsim run <scenario.yaml> [OPTIONS]
 modsim validate <scenario.yaml> [--strict]
   # Check YAML syntax and configuration without running
 
+modsim rf <scenario.yaml> --dry-run [--out DIR] [--window START:END] [--sensors ID,...]
+                  [--truth-format auto|parquet|csv]
+  # RF emission schedule, link budgets, truth tables and IQ sizing (Phase 0)
+
 modsim helm-values <comms_export.json> [-o output.yaml]
   # Generate Helm values from an existing comms export
 
@@ -246,6 +251,60 @@ communication:
 - `exponential`: Pd = exp(-k * d)
 - `sigmoid`: Pd = 1/(1 + exp(k * (d - half_range)))
 
+## RF Emitters and SigMF (preview)
+
+swarmsim is gaining an RF layer: drones, their ground controllers and background devices act as RF
+emitters with commercial link profiles, and RF sensors record SigMF IQ. See
+[docs/design/rf-sigmf.md](docs/design/rf-sigmf.md) for the full design. **Phase 0** is available now.
+It schedules every emission, computes per-sensor link budgets (free-space loss, radio horizon, SNR,
+detectability, Doppler, bearing), writes the ground-truth tables, and estimates IQ storage. IQ
+synthesis comes in Phase 1.
+
+```bash
+uv sync --extra rf    # optional: pyarrow for Parquet truth tables (CSV otherwise)
+uv run modsim rf scenarios/rf_fpv_mix.yaml --dry-run
+# output/rf/rf_fpv_mix/
+#   manifest.json        sizing per recording, emitter/emission counts, seeds, timings
+#   truth/emitters.*     every drone, controller and background emitter
+#   truth/emissions.*    every burst / hop / continuous transmission (time, frequency, EIRP, position)
+#   truth/links.*        per (emission, sensor, band): range, bearing, Doppler, SNR, detectable
+```
+
+Built-in link profiles live in `modsim/rf/profiles/` (DJI OcuSync downlink/uplink and DroneID,
+ExpressLRS 900 MHz / 2.4 GHz, Crossfire, analog FPV, Wi-Fi drones, Remote ID over BLE and Wi-Fi, an
+intermittent SiK telemetry radio, `silent`, plus background Wi-Fi APs and BLE devices). Their
+parameters come from public sources and are provisional. Attach them to groups and declare RF sensors
+in the scenario:
+
+```yaml
+groups:
+  - group_id: fpv
+    # ... motion fields ...
+    rf:
+      links:
+        - profile: elrs_900
+        - {profile: analog_fpv, params: {channel: R5}}
+      controller:
+        placement: per_group          # per_drone | per_group | {count: N} operator sites
+        offset_from_spawn: [-0.8, -0.5]
+        links: [elrs_900]
+
+rf:
+  epoch: "2026-01-01T00:00:00Z"
+  background:
+    - {profile: wifi_ap, density_per_km2: 1.0}
+
+rf_sensors:
+  - id: RF-01
+    position: [4.0, 4.0, 0.010]       # km
+    type: detect                      # detect | df (df needs an array)
+    receiver: {noise_figure_db: 6, sample_format: ci16_le}
+    tuning:
+      mode: fixed                     # fixed | multi | scanning
+      bands:
+        - {name: ism915, center_hz: 915.0e6, sample_rate: 30.0e6}
+```
+
 ## Example Scenarios
 
 ### Real-World Inspired
@@ -320,6 +379,12 @@ modsim/
     track_messages.py   Track.json message generation
     export.py           Locust timeline generation (JSON + JSONL)
     helm_values.py      Helm values YAML generation
+  rf/
+    profiles/           Commercial link profile library (YAML)
+    config.py           rf / rf_sensors / groups[].rf parsing and validation
+    scheduler.py        Emitters (drones, controllers, background) and emission scheduling
+    links.py            Per-sensor link budget, detectability, scanning coverage
+    runner.py           modsim rf pipeline, truth tables and manifest
 
 locust/
   locustfile.py         Timeline replay with REST, Zenoh native, and UDL transports

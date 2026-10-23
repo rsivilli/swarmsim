@@ -345,6 +345,9 @@ def validate(scenario: str, strict: bool):
         if cfg.communication and cfg.communication.enabled:
             click.echo(f"  Communication: enabled ({cfg.communication.strategy.strategy_name})")
 
+        if cfg.rf:
+            _echo_rf_summary(cfg)
+
         sys.exit(0)
 
     except FileNotFoundError:
@@ -554,6 +557,128 @@ def animate_all(
         for name, err in failed:
             click.secho(f"  • {name}: {err}", fg="red")
         sys.exit(1)
+
+
+def _echo_rf_summary(cfg, out_dir: str = "output/rf") -> None:
+    """Print the RF section summary and the IQ storage preflight for `validate`."""
+    from .rf.sizing import format_bytes, free_bytes, recordings_for_sensor
+
+    rfs = cfg.rf
+    window = rfs.rf.window or (0.0, float(cfg.duration))
+    links = sum(len(g.links) for g in rfs.groups.values())
+    click.echo(
+        f"  RF: {len(rfs.sensors)} sensor(s), {len(rfs.groups)} group(s) with {links} link(s), "
+        f"{len(rfs.rf.background)} background source(s)"
+    )
+    recordings = [r for s in rfs.sensors for r in recordings_for_sensor(s, window[1] - window[0])]
+    total = sum(r.total_bytes for r in recordings)
+    free = free_bytes(out_dir)
+    click.echo(
+        f"  RF IQ estimate: {format_bytes(total)} across {len(recordings)} recording(s) "
+        f"for window {window[0]:g}-{window[1]:g}s ({format_bytes(free)} free at {out_dir})"
+    )
+    if total > free:
+        click.secho("  ⚠ Estimated IQ output exceeds free disk space", fg="yellow")
+
+
+def _parse_window(value: str | None) -> tuple[float, float] | None:
+    if value is None:
+        return None
+    try:
+        start, end = (float(v) for v in value.split(":"))
+    except ValueError:
+        raise click.BadParameter("expected START:END in seconds, e.g. 0:60") from None
+    return start, end
+
+
+@cli.command("rf")
+@click.argument("scenario", type=click.Path(exists=True))
+@click.option(
+    "--out",
+    "out_dir",
+    type=click.Path(),
+    default=None,
+    help="Output directory (default: output/rf/<scenario file stem>)",
+)
+@click.option("--window", default=None, help="Time window to synthesize, START:END seconds")
+@click.option("--sensors", default=None, help="Comma-separated RF sensor ids (default: all)")
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Schedule emissions, compute link budgets, write truth tables and sizing; no IQ",
+)
+@click.option(
+    "--truth-format",
+    type=click.Choice(["auto", "parquet", "csv"]),
+    default="auto",
+    help="Truth table format (auto: parquet when pyarrow is installed, else csv)",
+)
+def rf_cmd(
+    scenario: str,
+    out_dir: str | None,
+    window: str | None,
+    sensors: str | None,
+    dry_run: bool,
+    truth_format: str,
+):
+    """Simulate RF emitters and RF sensors (SigMF output).
+
+    Phase 0 supports --dry-run only: it writes the emitter, emission and link
+    ground-truth tables plus a manifest with IQ storage estimates.
+
+    Example:
+        modsim rf scenarios/rf_fpv_mix.yaml --dry-run
+        modsim rf scenarios/rf_fpv_mix.yaml --dry-run --window 0:30 --sensors RF-01
+    """
+    from .rf.runner import plan_rf, write_outputs
+    from .rf.sizing import format_bytes, free_bytes
+
+    try:
+        if not dry_run:
+            raise ConfigError(
+                "IQ synthesis is not implemented yet (Phase 1); run with --dry-run for the "
+                "schedule, truth tables and sizing"
+            )
+        cfg = load_scenario(scenario)
+        if cfg.rf is None:
+            raise ConfigError("Scenario has no RF configuration (rf / rf_sensors / groups[].rf)")
+        out = Path(out_dir) if out_dir else Path("output") / "rf" / Path(scenario).stem
+        sensor_ids = [s.strip() for s in sensors.split(",")] if sensors else None
+
+        plan = plan_rf(cfg, window=_parse_window(window), sensor_ids=sensor_ids)
+
+        free = free_bytes(out)
+        click.echo(f"RF plan: {cfg.name}")
+        click.echo(f"  Window:     {plan.window[0]:g}-{plan.window[1]:g}s")
+        click.echo(f"  Emitters:   {format_number(len(plan.emitters))}")
+        click.echo(f"  Emissions:  {format_number(len(plan.emissions))}")
+        det = plan.links["detectable"]
+        click.echo(
+            f"  Links:      {format_number(len(det))} above cull floor, "
+            f"{format_number(int(det.sum()))} detectable"
+        )
+        click.echo("  Recordings:")
+        for r in plan.recordings:
+            click.echo(
+                f"    {r.recording}: {r.sample_rate / 1e6:g} MS/s × {r.num_channels} ch "
+                f"{r.sample_format} → {format_bytes(r.total_bytes)}"
+            )
+        click.echo(f"  IQ total:   {format_bytes(plan.total_bytes)} ({format_bytes(free)} free)")
+        if plan.total_bytes > free:
+            click.secho("  ⚠ Estimated IQ output exceeds free disk space", fg="yellow")
+
+        files, manifest_path, _ = write_outputs(plan, out, scenario, truth_format)
+        click.echo()
+        for f in files:
+            click.secho(f"✓ {f}", fg="green")
+        click.secho(f"✓ {manifest_path}", fg="green")
+
+    except (ConfigError, ValueError, RuntimeError) as e:
+        click.secho(f"✗ {e}", fg="red")
+        sys.exit(1)
+    except KeyboardInterrupt:
+        click.secho("\n✗ Interrupted by user", fg="yellow")
+        sys.exit(130)
 
 
 @cli.command()

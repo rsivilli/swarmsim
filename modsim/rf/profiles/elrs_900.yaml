@@ -1,0 +1,23 @@
+id: elrs_900
+description: ExpressLRS 900 MHz (FCC915 domain) LoRa control link with TDD telemetry
+waveform: lora
+bandwidth_hz: 500000
+power_dbm: 20
+antenna_gain_dbi: 2
+roles: [drone, controller]
+channels_mhz: {start: 903.5, step: 0.6, count: 40}
+activity:
+  - model: periodic_hopping
+    params:
+      packet_rate_hz: 200
+      hop_interval_packets: 4
+      tlm_ratio: 8           # 1 in 8 slots is a telemetry (downlink) packet
+      slot_owner: all
+      lora: {sf: 6, bw_hz: 500000, payload_bytes: 8, preamble: 6, cr: 3, implicit_header: true, crc: false}
+role_params:
+  drone: {slot_owner: telemetry}
+  controller: {slot_owner: uplink, power_dbm: 27}
+calibration: provisional
+sources:
+  - ExpressLRS firmware source (FHSS domain tables, packet rates, OTA packet sizes), github.com/ExpressLRS/ExpressLRS
+  - Semtech SX1276 datasheet (LoRa time-on-air formula)
