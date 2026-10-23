@@ -11,18 +11,18 @@ from typing import Callable
 
 import numpy as np
 
+from .array import calibration_errors, element_offsets_world
 from .models import RFSensorConfig, TuningMode
 from .propagation import C_MPS
 from .receiver import build_receiver
 from .runner import RFPlan
+from .scheduler import make_rng
 from .sigmf_writer import build_annotations, build_meta, write_collection, write_json
 from .synth import EmitterInfo, RecordingJob, render_chunk
 
 
 def unsupported_reason(sensor: RFSensorConfig) -> str | None:
     """Why a sensor can't be synthesized yet (None if it can)."""
-    if sensor.array is not None:
-        return "antenna arrays are synthesized from Phase 3"
     if sensor.tuning.mode == TuningMode.SCANNING:
         return "scanning tuning is synthesized from Phase 4"
     return None
@@ -48,6 +48,25 @@ def _waveform_params(plan: RFPlan, emitter_idx: int) -> dict:
         if "lora" in comp.params:
             params["lora"] = dict(comp.params["lora"])
     return params
+
+
+def channel_calibration(plan: RFPlan, sensor: RFSensorConfig) -> np.ndarray:
+    """Per-channel complex gain error of an array sensor (truth), drawn once per sensor."""
+    cm = sensor.receiver.impairments.get("channel_mismatch") or {}
+    rng = make_rng(plan.cfg.seed, "calibration", sensor.sensor_id)
+    return calibration_errors(
+        sensor.num_channels, cm.get("gain_db_sigma", 0.0), cm.get("phase_deg_sigma", 0.0), rng
+    )
+
+
+def _array_fields(plan: RFPlan, sensor: RFSensorConfig) -> dict:
+    if sensor.array is None:
+        return {}
+    return {
+        "element_offsets_m": element_offsets_world(sensor.array),
+        "array": sensor.array,
+        "channel_gain": channel_calibration(plan, sensor),
+    }
 
 
 def build_jobs(plan: RFPlan, out_dir: Path) -> tuple[list[RecordingJob], list[dict]]:
@@ -105,6 +124,7 @@ def build_jobs(plan: RFPlan, out_dir: Path) -> tuple[list[RecordingJob], list[di
                 tau_mid=tau_mid,
                 emitters=infos,
                 trajectories=trajectories,
+                **_array_fields(plan, sensor),
             )
             job.build_index()
             jobs.append(job)
@@ -132,6 +152,7 @@ def build_jobs(plan: RFPlan, out_dir: Path) -> tuple[list[RecordingJob], list[di
                                 "doppler_hz",
                                 "azimuth_deg",
                                 "elevation_deg",
+                                "radial_velocity_mps",
                                 "detectable",
                             )
                         },
@@ -167,7 +188,7 @@ def synthesize(
     for job in jobs:
         Path(job.path).parent.mkdir(parents=True, exist_ok=True)
         with open(job.path, "wb") as f:
-            f.truncate(2 * job.n_samples * job.receiver.numpy_dtype.itemsize)
+            f.truncate(2 * job.n_channels * job.n_samples * job.receiver.numpy_dtype.itemsize)
     build_s = time.perf_counter() - t_build
 
     tasks = [(j, c) for j, job in enumerate(jobs) for c in range(job.n_chunks)]
@@ -208,6 +229,7 @@ def synthesize(
             emitters=plan.emitters,
             library=rfs.library,
             origin=plan.cfg.reference_origin,
+            array=sensor.array,
         )
         data_path = Path(job.path)
         meta = build_meta(
@@ -224,6 +246,7 @@ def synthesize(
             seed=plan.cfg.seed,
             window=plan.window,
             origin=plan.cfg.reference_origin,
+            channel_gain=job.channel_gain if job.n_channels > 1 else None,
         )
         meta_path = data_path.with_suffix(".sigmf-meta")
         write_json(meta_path, meta)
@@ -245,7 +268,7 @@ def synthesize(
     for sid, metas in by_sensor.items():
         write_collection(out_dir / sid / f"{sid}.sigmf-collection", sensors[sid], metas)
 
-    total_samples = sum(job.n_samples for job in jobs)
+    total_samples = sum(job.n_samples * job.n_channels for job in jobs)  # all channels
     timing = {
         "build_s": build_s,
         "render_s": render_s,

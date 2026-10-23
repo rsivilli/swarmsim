@@ -11,6 +11,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from .array import mean_pattern_gain_db
 from .geometry import Trajectory, relative_geometry
 from .models import EmissionTable, Emitter, RFSensorConfig, TuningMode
 from .propagation import doppler_hz, fspl_db, noise_floor_dbm, radio_horizon_m
@@ -148,6 +149,11 @@ def compute_links(
                 + sensor.rx_gain_dbi
                 + 10.0 * np.log10(frac[idx])
             )
+            if sensor.array is not None and sensor.array.element_pattern != "isotropic":
+                # Per-element SNR: element pattern averaged over the array toward the emitter
+                rx = rx + mean_pattern_gain_db(
+                    sensor.array, geo["azimuth_deg"][idx], geo["elevation_deg"][idx]
+                )
             noise = noise_floor_dbm(np.maximum(overlap[idx], 1.0), sensor.receiver.noise_figure_db)
             snr = rx - noise
             keep = snr >= cull_snr_db

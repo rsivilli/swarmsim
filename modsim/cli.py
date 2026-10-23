@@ -709,7 +709,7 @@ def rf_cmd(
                 if r.clipped:
                     click.secho(f"  ⚠ {r.clipped} clipped I/Q components", fg="yellow")
             click.echo(
-                f"  {timing['samples'] / 1e6:.1f} MS in {timing['render_s']:.1f}s "
+                f"  {timing['samples'] / 1e6:.1f} MS (all channels) in {timing['render_s']:.1f}s "
                 f"({timing['msps']:.2f} MS/s, {timing['workers']} workers)"
             )
             manifest["mode"] = "iq"

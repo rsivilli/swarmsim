@@ -39,10 +39,10 @@ class ReceiverChain:
         return 10 ** (self.full_scale_dbm / 10)
 
     def add_noise(self, buf: np.ndarray, rng: np.random.Generator) -> None:
-        """Add complex thermal noise in place to a complex64 buffer."""
+        """Add complex thermal noise in place to a complex64 buffer (samples × channels)."""
         sigma = np.float32(np.sqrt(self.noise_mw / 2))
         iq = buf.view(np.float32)
-        iq += sigma * rng.standard_normal(len(iq), dtype=np.float32)
+        iq += sigma * rng.standard_normal(iq.shape, dtype=np.float32)
 
     def digitize(self, x: np.ndarray) -> tuple[np.ndarray, int]:
         """Scale to full scale, quantize and clip; returns interleaved I/Q and clip count."""
