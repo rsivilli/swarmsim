@@ -1,6 +1,7 @@
 # Design: RF emitter simulation and SigMF IQ generation
 
-Status: **Draft for review**. No code has been written yet.
+Status: **Draft for review**. No code has been written yet. The open questions from the first draft
+have been resolved (§14).
 
 ## 1. Summary
 
@@ -31,6 +32,12 @@ existing motion model. `modsim run`, the comms timeline and the Locust pipeline 
 | Compute | Local multiprocess (single large machine) |
 | Ground truth | Emission truth, geometry truth, detectability flags |
 | Extra emitters | Ground controllers, silent/intermittent drones, background RF |
+| Annotation default | `dwell` granularity; per-burst truth in Parquet |
+| Timestamps | Fixed, configurable scenario epoch (`rf.epoch`) |
+| Profile calibration | Public sources only (FCC filings, datasheets, open-source firmware, published captures) |
+| Array file layout | One interleaved multichannel dataset per recording (`core:num_channels`) |
+| Scanning retune gaps | Zero-filled samples |
+| Dependencies | `sigmf` and `pyarrow` in an optional `rf` extra |
 
 ### Non-goals (for now)
 
@@ -141,8 +148,9 @@ Each link profile defines an **activity model** that produces a list of emission
 
 Profiles live in `modsim/rf/profiles/*.yaml` and can be overridden per scenario. Parameters come from
 **public sources only**: FCC ID test reports, manufacturer datasheets and open-source firmware
-(ExpressLRS, SiK). The values below are **starting points to be calibrated** during implementation
-against those sources and against public reference captures.
+(ExpressLRS, SiK). No private reference captures are available, so the values below are **starting
+points to be calibrated** during implementation against those sources and against published research
+captures. Each profile file records its sources.
 
 | Profile id | Band(s) | Waveform family | Bandwidth | Timing | Typical EIRP |
 |---|---|---|---|---|---|
@@ -222,7 +230,7 @@ rf_sensors:
 |---|---|---|
 | `fixed` | One band for the whole run | One recording (one dataset) |
 | `multi` | Several bands recorded **simultaneously** (parallel receivers) | One recording per band |
-| `scanning` | One receiver hops through bands on a dwell schedule | One recording; a new `captures` segment at every retune (`core:sample_start`, `core:frequency`, `core:datetime`). Retune dead time is recorded as zeros, or skipped by setting `core:sample_start`/`core:global_index` (configurable). |
+| `scanning` | One receiver hops through bands on a dwell schedule | One recording; a new `captures` segment at every retune (`core:sample_start`, `core:frequency`, `core:datetime`). Retune dead time is written as **zero-filled samples**, so the sample index maps linearly to time. Each gap is marked with a `swarmsim:retune` annotation. |
 
 In `scanning` mode, all bands must share a sample rate, because SigMF has one `core:sample_rate` per
 recording. The validator enforces this. Modes that need different rates should use `multi` instead.
@@ -295,7 +303,7 @@ output/rf/<scenario>/
 
 Multichannel array data goes **in one dataset per recording, using `core:num_channels`**, with the
 samples interleaved per element. This is the most widely supported way to store multichannel data in
-SigMF. A per-element-file layout grouped by a collection is a configurable alternative.
+SigMF. Per-element files are not supported.
 
 ### 8.2 Metadata contents
 
@@ -487,17 +495,13 @@ framing, TDOA network sensors, a GPU backend, and a Kubernetes job runner.
   expected.
 - **CI:** small, fast scenarios only (≤ 1 s of IQ at low sample rates). Large benchmarks run manually.
 
-## 14. Open questions for reviewers
+## 14. Resolved questions
 
-1. **Annotation default:** is `dwell` the right default, or should ML-dataset use cases default to
-   `emission`?
-2. **Scenario epoch:** should `core:datetime` use a fixed configurable epoch (proposed), or wall-clock
-   time at run start?
-3. **Profile calibration:** do you have reference captures of the target commercial links that we can
-   calibrate the profiles against (spectrum shape, burst timing)? Without them, calibration relies on
-   FCC filings and open-source firmware.
-4. **Array layout:** interleaved multichannel in one dataset (proposed), or one file per element in a
-   collection? Which matters more for your downstream DF tooling?
-5. **Retune gaps in scanning mode:** zero-filled samples (simpler for tools that assume contiguous
-   time), or skipped samples marked by `captures` (smaller files)?
-6. **Dependencies:** is adding `sigmf` and `pyarrow` as an optional `rf` extra acceptable?
+| Question | Decision |
+|---|---|
+| Default annotation granularity | `dwell`. Use `emission` explicitly for small ML-dataset runs. |
+| `core:datetime` base | Fixed epoch from `rf.epoch`, so reruns with the same seed produce identical metadata |
+| Profile calibration | Public sources only; sources cited in each profile file |
+| Array layout | Interleaved multichannel in one dataset per recording |
+| Scanning retune gaps | Zero-filled samples, each marked by a `swarmsim:retune` annotation |
+| Dependencies | `sigmf` + `pyarrow` in an optional `rf` extra |
