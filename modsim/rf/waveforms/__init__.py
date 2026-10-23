@@ -1,10 +1,16 @@
 """Baseband waveform generators.
 
-Protocol-like generators (``lora``, ``fm``, ``cw``) are closed-form functions of the time since
-the emission started, so any chunk of a recording can be rendered independently and the
-propagation delay is applied exactly by evaluating them at ``t - tau(t)``. Waveform families
-not implemented yet (``ofdm``, ``fsk``, until Phase 2) fall back to a band-limited noise
-placeholder with the correct power, bandwidth and timing.
+All waveforms are protocol-like: correct modulation family, bandwidth, burst structure and
+timing, with random payload bits.
+
+* ``lora``, ``fm`` and ``cw`` are closed-form functions of the time since the emission started.
+* ``fsk`` (GFSK) uses a phase table at 16 samples per bit, interpolated at the exact sample times.
+* ``ofdm`` bursts are built by IFFT at their native rate and placed on the sensor grid with a
+  fractional-delay FIR plus rational resampling (see ``native.py``).
+
+Any chunk of a recording can be rendered independently, and propagation delay is applied by
+evaluating the waveform at ``t - tau(t)``. ``noise`` is generic band-limited noise with the
+right power, bandwidth and timing, for custom emitters with no specific modulation.
 
 Generators return ``(kind, values)``: constant-envelope waveforms return ``("phase", radians)``,
 so the caller can add the carrier phase and take a single sin/cos; others return
@@ -13,16 +19,48 @@ so the caller can add the carrier phase and take a single sin/cos; others return
 
 from __future__ import annotations
 
+import json
+
 import numpy as np
 
 from .fm import fm_video
+from .fsk import gfsk_phase
 from .lora import lora_css
+from .native import sample_native
+from .ofdm import ofdm_burst
 
-PROTOCOL_LIKE = {"lora", "fm", "cw"}
+PROTOCOL_LIKE = {"lora", "fm", "cw", "ofdm", "fsk"}
+
+# Waveform parameters accepted in a profile's ``waveform_params``
+WAVEFORM_PARAMS: dict[str, set[str]] = {
+    "ofdm": {"standard", "modulation", "sync_symbols", "zc_roots"},
+    "fsk": {"bit_rate", "h", "bt", "preamble", "sync"},
+    "fm": {"deviation_hz", "audio_subcarrier_hz", "audio_level"},
+    "lora": set(),  # LoRa parameters come from the activity's ``lora`` block
+    "cw": set(),
+    "noise": set(),  # generic band-limited noise (custom emitters; fidelity "placeholder")
+    "none": set(),
+}
+
+OFDM_CHOICES = {
+    "standard": {"wifi", "lte", "droneid"},
+    "modulation": {"bpsk", "qpsk", "qam16", "qam64"},
+}
+
+_BURSTS: dict[tuple, tuple[np.ndarray, float]] = {}
 
 
 def fidelity(waveform: str) -> str:
     return "protocol_like" if waveform in PROTOCOL_LIKE else "placeholder"
+
+
+def _ofdm(duration: float, seed: int, bandwidth_hz: float, wp: dict) -> tuple[np.ndarray, float]:
+    key = (seed, duration, bandwidth_hz, json.dumps(wp, sort_keys=True))
+    if key not in _BURSTS:
+        if len(_BURSTS) > 256:
+            _BURSTS.clear()
+        _BURSTS[key] = ofdm_burst(duration, seed, bandwidth_hz, wp)
+    return _BURSTS[key]
 
 
 def render(
@@ -36,7 +74,8 @@ def render(
     sample_rate: float,
     noise_key: tuple,
 ) -> tuple[str, np.ndarray]:
-    """Waveform at times ``u`` (seconds since emission start, uniformly spaced)."""
+    """Waveform at times ``u`` (seconds since emission start, spaced 1/sample_rate)."""
+    wp = params.get("waveform") or {}
     if waveform == "cw":
         return "phase", np.zeros(len(u))
     if waveform == "lora":
@@ -49,7 +88,12 @@ def render(
             seed=seed,
         )
     if waveform == "fm":
-        return "phase", fm_video(u, seed=seed, **(params.get("fm") or {}))
+        return "phase", fm_video(u, seed=seed, **wp)
+    if waveform == "fsk":
+        return "phase", gfsk_phase(u, duration, seed, wp)
+    if waveform == "ofdm":
+        native, rate = _ofdm(duration, seed, bandwidth_hz, wp)
+        return "iq", sample_native(native, rate, float(u[0]), len(u), sample_rate)
     return "iq", bandlimited_noise(len(u), bandwidth_hz, sample_rate, seed, noise_key)
 
 

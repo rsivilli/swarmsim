@@ -20,6 +20,7 @@ activity:
       offered_load: 0.3
       frame_s: [0.0002, 0.0015]
       channel: "6"
+waveform_params: {standard: wifi, modulation: qam16}
 signal: {type: digital, standard: "802.11", carrier_variant: multi_carrier, multiplexing: ofdm}
 calibration: provisional
 sources:

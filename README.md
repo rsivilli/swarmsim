@@ -255,7 +255,7 @@ communication:
 
 swarmsim is gaining an RF layer: drones, their ground controllers and background devices act as RF
 emitters with commercial link profiles, and RF sensors record SigMF IQ. See
-[docs/design/rf-sigmf.md](docs/design/rf-sigmf.md) for the full design. **Phases 0–1** are
+[docs/design/rf-sigmf.md](docs/design/rf-sigmf.md) for the full design. **Phases 0–2** are
 available now:
 
 - Every emission is scheduled, and each sensor gets a link budget (free-space loss, radio horizon,
@@ -263,9 +263,14 @@ available now:
 - Ground-truth tables and IQ storage estimates are written for every run.
 - Single-element sensors with `fixed` or `multi` tuning get synthesized IQ as SigMF recordings, with
   per-emission annotations.
-- ExpressLRS/Crossfire (LoRa) and analog FPV (FM video) use protocol-like waveforms. OFDM/FSK links
-  (DJI, Wi-Fi, Remote ID) are band-limited noise placeholders with correct power, bandwidth and
-  timing until Phase 2. Arrays and scanning sensors arrive in Phases 3–4.
+- All built-in links use protocol-like waveforms:
+  - ExpressLRS/Crossfire: LoRa chirps.
+  - Analog FPV: FM video.
+  - DJI OcuSync and DroneID: LTE-like OFDM with Zadoff-Chu sync.
+  - Wi-Fi and Remote ID over Wi-Fi: 802.11 OFDM with the legacy preamble.
+  - BLE, Remote ID over BLE and SiK: GFSK.
+
+  Arrays and scanning sensors arrive in Phases 3–4.
 
 ```bash
 uv sync --extra rf    # optional: pyarrow (Parquet truth) and sigmf-python
@@ -399,7 +404,7 @@ modsim/
     scheduler.py        Emitters (drones, controllers, background) and emission scheduling
     links.py            Per-sensor link budget, detectability, scanning coverage
     runner.py           modsim rf pipeline, truth tables and manifest
-    waveforms/          LoRa, FM video, CW and noise-placeholder generators
+    waveforms/          LoRa, FM video, OFDM (Wi-Fi/LTE/DroneID), GFSK, CW, native-rate resampling
     synth.py            Chunk renderer (delay, Doppler, path loss, anti-alias)
     receiver.py         Thermal noise, full scale, ADC quantization and clipping
     iq.py               Recording jobs, multiprocess synthesis

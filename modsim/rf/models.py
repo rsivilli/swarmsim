@@ -76,6 +76,7 @@ class LinkProfile:
     calibration: str = "provisional"
     sources: list[str] = field(default_factory=list)
     signal: dict = field(default_factory=dict)  # SigMF `signal:detail` fields for annotations
+    waveform_params: dict = field(default_factory=dict)  # generator settings (see waveforms/)
 
     @property
     def silent(self) -> bool:

@@ -250,7 +250,7 @@ class TestSynthesis:
 
     def test_band_edge_emission_is_filtered_not_aliased(self, tmp_path):
         prof = copy.deepcopy(CW_PROFILE)
-        prof.update(waveform="fsk", bandwidth_hz=200000, channels_mhz=[915.45], power_dbm=30)
+        prof.update(waveform="noise", bandwidth_hz=200000, channels_mhz=[915.45], power_dbm=30)
         prof["activity"] = [{"model": "continuous", "params": {"channel": 915.45}}]
         raw = base()
         raw["rf"]["profiles"]["edge"] = prof

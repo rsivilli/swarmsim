@@ -13,6 +13,7 @@ activity:
       burst_s: 0.00064
       jitter_s: 0.005
       sequence: random_one
+waveform_params: {standard: droneid}
 signal: {type: digital, standard: DJI DroneID, mod_class: psk, carrier_variant: multi_carrier, multiplexing: ofdm}
 calibration: provisional
 sources:

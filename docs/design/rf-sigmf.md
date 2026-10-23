@@ -1,6 +1,6 @@
 # Design: RF emitter simulation and SigMF IQ generation
 
-Status: **Phases 0–1 implemented**; phases 2–5 not started. The open questions from the first draft
+Status: **Phases 0–2 implemented**; phases 3–5 not started. The open questions from the first draft
 have been resolved (§14).
 
 ## 1. Summary
@@ -478,7 +478,7 @@ framing, TDOA network sensors, a GPU backend, and a Kubernetes job runner.
 |---|---|---|
 | **0: Plumbing and truth** ✅ | Models, YAML parsing and validation, profile library, controllers, silent drones, Stage A scheduler, link budget, detectability, parquet truth, `--dry-run` sizing | `modsim rf --dry-run` produces truth tables and sizing for a sample scenario; unit tests for path loss, horizon, scheduling |
 | **1: Single-channel IQ** ✅ | Fixed tuning, noise + FSPL + Doppler, `lora` + `fm` waveforms (ELRS, analog FPV), chunked multiprocess writer, SigMF writer, determinism | Measured in-band SNR matches the link budget within ±0.5 dB; Doppler tone within ±1 Hz; output byte-identical for 1 vs N workers; `sigmf` validation passes; throughput benchmark recorded |
-| **2: Remaining profiles + clutter** | `ofdm` + `fsk` waveforms (DJI, Wi-Fi, Remote ID BLE/Wi-Fi), background RF, CSMA traffic, annotation granularity modes | Spectrogram/occupancy checks per profile against reference shapes; annotations line up with energy in the spectrogram |
+| **2: Remaining profiles + clutter** ✅ | `ofdm` + `fsk` waveforms (DJI, Wi-Fi, Remote ID BLE/Wi-Fi), background RF, CSMA traffic, annotation granularity modes | Spectrogram/occupancy checks per profile against reference shapes; annotations line up with energy in the spectrogram |
 | **3: Arrays and DF** | Array steering, element patterns, calibration error, spatial annotations, multichannel SigMF | A MUSIC/Bartlett estimator in the test suite recovers synthetic bearings within tolerance at high SNR |
 | **4: Realism and tuning modes** | Two-ray, Rician/TDL fading, receiver impairments, AGC/ADC clipping, multi-band and scanning tuning | Fading statistics match the target K-factor; scanning recordings have correct `captures` segments; clipping is counted |
 | **5: Performance** | Template caching, coarse-grid channel, profiling, optional pyFFTW | Benchmarks published in the README next to the existing scaling table |
@@ -555,6 +555,49 @@ Where the Phase 0 code differs from, or adds detail to, the design above:
   Known hotspots for Phase 5: the per-burst FFTs of noise placeholders (2.4 GHz with hundreds of
   background APs runs at about 1.7 MS/s with 4 workers) and anti-alias decimation of band-edge
   bursts.
+
+### Phase 2 implementation notes
+
+Background RF, CSMA traffic and annotation granularity were already delivered in Phases 0–1, so
+Phase 2 replaced the noise placeholders with protocol-like OFDM and GFSK generators. Every
+built-in emitting profile is now `protocol_like`.
+
+- **OFDM** (`waveforms/ofdm.py`), selected by each profile's `waveform_params.standard`:
+  - `wifi`: 802.11a/g/n legacy layout. 20 MS/s, 64-point FFT, STF (10 × 0.8 µs), LTF (1.6 µs
+    guard + 2 × 3.2 µs), then 4 µs symbols with 48 data and 4 pilot subcarriers. The first data
+    symbol is BPSK (SIGNAL-like), the rest use the profile's modulation.
+  - `lte`: 15 kHz LTE-like numerology sized to the emission bandwidth (1.4–40 MHz:
+    128/72 … 4096/2400 FFT/active subcarriers, normal CP), with Zadoff-Chu sync symbols. Used for
+    the DJI OcuSync downlink (10/20/40 MHz modes) and uplink (1.4 MHz).
+  - `droneid`: 1024-point FFT at 15.36 MS/s, 600 subcarriers, 9 symbols (CP 80, then 72), ZC
+    roots 600 and 147 in symbols 4 and 6, following the published DroneID analysis.
+  - Bursts are generated 2× oversampled with 100 ns raised-cosine windowed overlap-add across
+    symbol boundaries, as real transmitters do. Without it, hard symbol edges splatter to the
+    native Nyquist frequency and fractional resampling becomes grid-dependent.
+- **Native-rate placement** (`waveforms/native.py`): OFDM bursts are placed on the sensor grid with
+  a 65-tap Kaiser windowed-sinc fractional delay and an exact rational `resample_poly`. The
+  resampler also band-limits a burst to a narrower sensor bandwidth. Tone tests give −45 to −50 dB
+  error up to 0.83·Nyquist. The one approximation: within a single burst the grid is uniform,
+  ignoring v/c time compression (about 5×10⁻¹¹ s over a 1.4 ms Wi-Fi frame at 20 m/s, around
+  −50 dB). Delay and Doppler are still exact through the carrier phase and the burst's start time.
+- **GFSK** (`waveforms/fsk.py`): Gaussian-filtered NRZ with preamble and sync word, sent LSB first.
+  BLE and Remote ID use 1 Mb/s, h = 0.5, BT = 0.5 and access address 0x8E89BED6; SiK uses
+  64 kb/s, h = 1. Phase is tabulated at 16 samples per bit and interpolated at the exact sample
+  times (error about 1e-3 rad), so GFSK stays phase-only like LoRa and FM.
+- **Profiles:** each profile has a validated `waveform_params` block. `noise` remains as an
+  explicit generic waveform for custom emitters (fidelity `placeholder`).
+- **Verified** (tests):
+  - 99% occupied bandwidth: Wi-Fi 16.4 MHz, LTE 20 MHz mode 17.8 MHz, 1.4 MHz mode 1.09 MHz,
+    DroneID 8.9 MHz, BLE about 1.0 MHz. Unit power within 0.3 dB.
+  - Wi-Fi STF periodicity, LTF repetition and cyclic prefixes.
+  - DroneID ZC symbols correlate above 0.999. BLE preamble and access address demodulate
+    bit-exact.
+  - In synthesized recordings, a DroneID burst's ZC symbol is found at its annotated sample
+    offset ±1, and Wi-Fi burst energy matches the link budget within 0.5 dB.
+- **Throughput** (RF-04 2.4 GHz, 100 MS/s, about 560 background APs/BLE devices plus DJI and
+  Remote ID): 0.66 MS/s with 1 worker, 1.79 MS/s with 4, byte-identical. About the same as the
+  placeholders, but now real waveforms; per-burst resampling and fractional delay are the Phase 5
+  targets.
 
 ## 13. Testing strategy
 

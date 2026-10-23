@@ -15,6 +15,7 @@ activity:
       jitter_s: 0.010        # BLE advDelay (0-10 ms)
       sequence: all
       channel_gap_s: 0.0005
+waveform_params: {bit_rate: 1000000, h: 0.5, bt: 0.5, preamble: "aa", sync: "8e89bed6"}
 signal: {type: digital, standard: ASTM F3411 (Bluetooth LE), mod_class: fsk, class_variant: GFSK}
 calibration: provisional
 sources:
