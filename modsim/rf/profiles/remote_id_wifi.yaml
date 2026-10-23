@@ -15,6 +15,7 @@ activity:
       jitter_s: 0.002
       sequence: one
       channel: "6"
+signal: {type: digital, standard: ASTM F3411 (Wi-Fi beacon), carrier_variant: multi_carrier, multiplexing: ofdm}
 calibration: provisional
 sources:
   - ASTM F3411 Remote ID broadcast requirements

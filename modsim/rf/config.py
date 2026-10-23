@@ -53,6 +53,7 @@ RECEIVER_KEYS = {
     "sample_format",
     "adc_bits",
     "full_scale_dbm",
+    "headroom_db",
     "gain_mode",
     "antenna_gain_dbi",
     "impairments",
@@ -132,7 +133,7 @@ def _parse_rf_block(raw: dict, duration: float) -> RFConfig:
         window = (w0, w1)
 
     annotations = raw.get("annotations") or {}
-    _check_keys(annotations, {"granularity"}, "rf.annotations")
+    _check_keys(annotations, {"granularity", "max_gap_s"}, "rf.annotations")
     gran = annotations.get("granularity", AnnotationGranularity.DWELL.value)
     try:
         granularity = AnnotationGranularity(gran)
@@ -168,6 +169,7 @@ def _parse_rf_block(raw: dict, duration: float) -> RFConfig:
         chunk_samples=chunk,
         cull_snr_db=_num(raw, "cull_snr_db", "rf", RFConfig.cull_snr_db),
         annotation_granularity=granularity,
+        annotation_max_gap_s=_num(annotations, "max_gap_s", "rf.annotations", 0.05, minimum=0),
         k_factor=_num(raw, "k_factor", "rf", RFConfig.k_factor, minimum=0, exclusive=True),
         background=background,
         profiles=dict(raw.get("profiles") or {}),
@@ -226,7 +228,10 @@ def _parse_receiver(raw: dict, where: str) -> ReceiverConfig:
         noise_figure_db=_num(raw, "noise_figure_db", where, 7.0, minimum=0),
         sample_format=fmt,
         adc_bits=adc_bits,
-        full_scale_dbm=_num(raw, "full_scale_dbm", where, -10.0),
+        full_scale_dbm=None
+        if raw.get("full_scale_dbm", "auto") == "auto"
+        else _num(raw, "full_scale_dbm", where),
+        headroom_db=_num(raw, "headroom_db", where, 50.0, minimum=0, exclusive=True),
         gain_mode=gain_mode,
         antenna_gain_dbi=_num(raw, "antenna_gain_dbi", where, 0.0),
         impairments=dict(raw.get("impairments") or {}),

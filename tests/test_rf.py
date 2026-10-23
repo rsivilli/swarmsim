@@ -557,11 +557,6 @@ class TestEndToEnd:
         table = pq.read_table(out / "truth" / "links.parquet")
         assert "snr_db" in table.column_names
 
-    def test_cli_requires_dry_run_until_phase_1(self, tmp_path, cli_runner):
-        result = cli_runner.invoke(cli, ["rf", str(write_scenario(tmp_path, BASE))])
-        assert result.exit_code == 1
-        assert "Phase 1" in result.output
-
     def test_cli_validate_prints_rf_summary(self, tmp_path, cli_runner):
         result = cli_runner.invoke(cli, ["validate", str(write_scenario(tmp_path, BASE))])
         assert result.exit_code == 0, result.output

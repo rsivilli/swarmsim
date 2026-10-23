@@ -12,6 +12,7 @@ activity:
       interval_s: 10.0
       burst_s: 0.05
       jitter_s: 2.0
+signal: {type: digital, standard: SiK telemetry, mod_class: fsk, class_variant: GFSK, spreading: fhss}
 calibration: provisional
 sources:
   - SiK radio firmware documentation (915 MHz FHSS, GFSK, 20 dBm)

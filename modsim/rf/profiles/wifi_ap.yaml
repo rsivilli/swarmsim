@@ -20,6 +20,7 @@ activity:
       offered_load: 0.05
       frame_s: [0.0001, 0.0015]
       channel: random
+signal: {type: digital, standard: "802.11", carrier_variant: multi_carrier, multiplexing: ofdm}
 calibration: provisional
 sources:
   - IEEE 802.11 (beacon interval 102.4 ms, channelization)

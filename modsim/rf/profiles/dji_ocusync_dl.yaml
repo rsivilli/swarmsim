@@ -18,6 +18,7 @@ activity:
         "10": [2405, 2415, 2425, 2435, 2445, 2455, 2465, 2475, 5730, 5740, 5750, 5760, 5770, 5780, 5790, 5800, 5810, 5820, 5830, 5840]
         "20": [2410, 2420, 2430, 2440, 2450, 2460, 2470, 5745, 5755, 5765, 5775, 5785, 5795, 5805, 5815, 5825, 5835]
         "40": [2420, 2440, 2460, 5755, 5775, 5795, 5815]
+signal: {type: digital, standard: DJI OcuSync, mod_class: qam, carrier_variant: multi_carrier, multiplexing: ofdm}
 calibration: provisional
 sources:
   - FCC ID test reports for DJI aircraft (occupied bandwidth modes, output power, operating bands)

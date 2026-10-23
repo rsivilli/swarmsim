@@ -20,7 +20,7 @@ uv sync
 # Optional extras
 uv sync --extra loadtest   # Locust, Zenoh, and the Zenoh monitor
 uv sync --extra udl        # Unified Data Library (UDL) transport for Locust
-uv sync --extra rf         # pyarrow for Parquet RF truth tables (modsim rf)
+uv sync --extra rf         # pyarrow + sigmf for RF truth tables and SigMF validation (modsim rf)
 ```
 
 ## Quickstart
@@ -153,9 +153,9 @@ modsim run <scenario.yaml> [OPTIONS]
 modsim validate <scenario.yaml> [--strict]
   # Check YAML syntax and configuration without running
 
-modsim rf <scenario.yaml> --dry-run [--out DIR] [--window START:END] [--sensors ID,...]
-                  [--truth-format auto|parquet|csv]
-  # RF emission schedule, link budgets, truth tables and IQ sizing (Phase 0)
+modsim rf <scenario.yaml> [--dry-run] [--out DIR] [--window START:END] [--sensors ID,...]
+                  [--workers N] [--force] [--truth-format auto|parquet|csv]
+  # RF emission schedule, link budgets, truth tables, IQ sizing and SigMF IQ synthesis
 
 modsim helm-values <comms_export.json> [-o output.yaml]
   # Generate Helm values from an existing comms export
@@ -255,20 +255,34 @@ communication:
 
 swarmsim is gaining an RF layer: drones, their ground controllers and background devices act as RF
 emitters with commercial link profiles, and RF sensors record SigMF IQ. See
-[docs/design/rf-sigmf.md](docs/design/rf-sigmf.md) for the full design. **Phase 0** is available now.
-It schedules every emission, computes per-sensor link budgets (free-space loss, radio horizon, SNR,
-detectability, Doppler, bearing), writes the ground-truth tables, and estimates IQ storage. IQ
-synthesis comes in Phase 1.
+[docs/design/rf-sigmf.md](docs/design/rf-sigmf.md) for the full design. **Phases 0–1** are
+available now:
+
+- Every emission is scheduled, and each sensor gets a link budget (free-space loss, radio horizon,
+  SNR, detectability, Doppler, bearing).
+- Ground-truth tables and IQ storage estimates are written for every run.
+- Single-element sensors with `fixed` or `multi` tuning get synthesized IQ as SigMF recordings, with
+  per-emission annotations.
+- ExpressLRS/Crossfire (LoRa) and analog FPV (FM video) use protocol-like waveforms. OFDM/FSK links
+  (DJI, Wi-Fi, Remote ID) are band-limited noise placeholders with correct power, bandwidth and
+  timing until Phase 2. Arrays and scanning sensors arrive in Phases 3–4.
 
 ```bash
-uv sync --extra rf    # optional: pyarrow for Parquet truth tables (CSV otherwise)
-uv run modsim rf scenarios/rf_fpv_mix.yaml --dry-run
+uv sync --extra rf    # optional: pyarrow (Parquet truth) and sigmf-python
+uv run modsim rf scenarios/rf_fpv_mix.yaml --dry-run                          # truth + sizing only
+uv run modsim rf scenarios/rf_fpv_mix.yaml --window 0:2 --sensors RF-01,RF-04 # synthesize IQ
 # output/rf/rf_fpv_mix/
-#   manifest.json        sizing per recording, emitter/emission counts, seeds, timings
+#   manifest.json        sizing, counts, seeds, timings, synthesis results
 #   truth/emitters.*     every drone, controller and background emitter
 #   truth/emissions.*    every burst / hop / continuous transmission (time, frequency, EIRP, position)
 #   truth/links.*        per (emission, sensor, band): range, bearing, Doppler, SNR, detectable
+#   RF-01/RF-01_ism915.sigmf-{data,meta}   IQ + annotations (signal:detail, signal:emitter, truth)
+#   RF-01/RF-01.sigmf-collection
 ```
+
+IQ is large: a single 100 MS/s ci16 channel writes 400 MB/s. The CLI checks the estimate against
+free disk space (override with `--force`). Use `--window` and `--sensors` to synthesize a subset,
+and `--workers N` to parallelize. Output is byte-identical for any worker count.
 
 Built-in link profiles live in `modsim/rf/profiles/` (DJI OcuSync downlink/uplink and DroneID,
 ExpressLRS 900 MHz / 2.4 GHz, Crossfire, analog FPV, Wi-Fi drones, Remote ID over BLE and Wi-Fi, an
@@ -385,6 +399,11 @@ modsim/
     scheduler.py        Emitters (drones, controllers, background) and emission scheduling
     links.py            Per-sensor link budget, detectability, scanning coverage
     runner.py           modsim rf pipeline, truth tables and manifest
+    waveforms/          LoRa, FM video, CW and noise-placeholder generators
+    synth.py            Chunk renderer (delay, Doppler, path loss, anti-alias)
+    receiver.py         Thermal noise, full scale, ADC quantization and clipping
+    iq.py               Recording jobs, multiprocess synthesis
+    sigmf_writer.py     .sigmf-meta annotations and .sigmf-collection
 
 locust/
   locustfile.py         Timeline replay with REST, Zenoh native, and UDL transports

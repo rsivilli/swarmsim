@@ -11,6 +11,7 @@ activity:
   - model: continuous
     params:
       channel: R1
+signal: {type: analog, mod_class: fm, standard: analog FPV video}
 calibration: provisional
 sources:
   - Published 5.8 GHz FPV channel tables (Raceband, Fatshark)

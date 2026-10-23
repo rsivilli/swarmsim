@@ -17,6 +17,7 @@ activity:
 role_params:
   drone: {slot_owner: telemetry, power_dbm: 20}
   controller: {slot_owner: uplink, power_dbm: 30}
+signal: {type: digital, standard: TBS Crossfire, spreading: css, duplexing: tdd}
 calibration: provisional
 sources:
   - TBS Crossfire product documentation (power levels, 50/150 Hz modes)

@@ -17,6 +17,7 @@ activity:
 role_params:
   drone: {slot_owner: telemetry}
   controller: {slot_owner: uplink, power_dbm: 24}
+signal: {type: digital, standard: ExpressLRS, spreading: css, duplexing: tdd}
 calibration: provisional
 sources:
   - ExpressLRS firmware source (ISM2G4 domain, packet rates), github.com/ExpressLRS/ExpressLRS

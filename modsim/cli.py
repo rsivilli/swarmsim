@@ -613,6 +613,13 @@ def _parse_window(value: str | None) -> tuple[float, float] | None:
     default="auto",
     help="Truth table format (auto: parquet when pyarrow is installed, else csv)",
 )
+@click.option(
+    "--workers",
+    type=click.IntRange(min=1),
+    default=None,
+    help="Parallel synthesis processes (default: CPU count)",
+)
+@click.option("--force", is_flag=True, help="Synthesize even if the IQ estimate exceeds free space")
 def rf_cmd(
     scenario: str,
     out_dir: str | None,
@@ -620,25 +627,29 @@ def rf_cmd(
     sensors: str | None,
     dry_run: bool,
     truth_format: str,
+    workers: int | None,
+    force: bool,
 ):
-    """Simulate RF emitters and RF sensors (SigMF output).
+    """Simulate RF emitters and RF sensors, writing SigMF recordings.
 
-    Phase 0 supports --dry-run only: it writes the emitter, emission and link
-    ground-truth tables plus a manifest with IQ storage estimates.
+    Writes ground-truth tables (emitters, emissions, links) and a manifest, then
+    synthesizes IQ for each sensor band as SigMF (.sigmf-data / .sigmf-meta,
+    plus a .sigmf-collection per sensor). --dry-run stops before synthesis.
+
+    Sensors with antenna arrays (Phase 3) or scanning tuning (Phase 4) are
+    included in the truth tables but not synthesized yet.
 
     Example:
         modsim rf scenarios/rf_fpv_mix.yaml --dry-run
-        modsim rf scenarios/rf_fpv_mix.yaml --dry-run --window 0:30 --sensors RF-01
+        modsim rf scenarios/rf_fpv_mix.yaml --window 0:5 --sensors RF-01 --workers 4
     """
+    import json
+
+    from .rf.iq import synthesize, unsupported_reason
     from .rf.runner import plan_rf, write_outputs
     from .rf.sizing import format_bytes, free_bytes
 
     try:
-        if not dry_run:
-            raise ConfigError(
-                "IQ synthesis is not implemented yet (Phase 1); run with --dry-run for the "
-                "schedule, truth tables and sizing"
-            )
         cfg = load_scenario(scenario)
         if cfg.rf is None:
             raise ConfigError("Scenario has no RF configuration (rf / rf_sensors / groups[].rf)")
@@ -646,6 +657,10 @@ def rf_cmd(
         sensor_ids = [s.strip() for s in sensors.split(",")] if sensors else None
 
         plan = plan_rf(cfg, window=_parse_window(window), sensor_ids=sensor_ids)
+        skipped = {s.sensor_id: unsupported_reason(s) for s in plan.sensors}
+        skipped = {k: v for k, v in skipped.items() if v}
+        to_render = [r for r in plan.recordings if r.sensor_id not in skipped]
+        iq_bytes = sum(r.total_bytes for r in to_render)
 
         free = free_bytes(out)
         click.echo(f"RF plan: {cfg.name}")
@@ -659,18 +674,65 @@ def rf_cmd(
         )
         click.echo("  Recordings:")
         for r in plan.recordings:
+            note = f"  (not synthesized: {skipped[r.sensor_id]})" if r.sensor_id in skipped else ""
             click.echo(
                 f"    {r.recording}: {r.sample_rate / 1e6:g} MS/s × {r.num_channels} ch "
-                f"{r.sample_format} → {format_bytes(r.total_bytes)}"
+                f"{r.sample_format} → {format_bytes(r.total_bytes)}{note}"
             )
-        click.echo(f"  IQ total:   {format_bytes(plan.total_bytes)} ({format_bytes(free)} free)")
-        if plan.total_bytes > free:
+        click.echo(f"  IQ total:   {format_bytes(iq_bytes)} ({format_bytes(free)} free)")
+        if iq_bytes > free:
+            if not dry_run and not force:
+                raise ConfigError(
+                    "Estimated IQ output exceeds free disk space; narrow --window/--sensors "
+                    "or pass --force"
+                )
             click.secho("  ⚠ Estimated IQ output exceeds free disk space", fg="yellow")
+        if not dry_run and not to_render:
+            raise ConfigError(
+                "No RF sensor can be synthesized yet: "
+                + "; ".join(f"{k}: {v}" for k, v in skipped.items())
+            )
 
-        files, manifest_path, _ = write_outputs(plan, out, scenario, truth_format)
+        files, manifest_path, manifest = write_outputs(plan, out, scenario, truth_format)
         click.echo()
         for f in files:
             click.secho(f"✓ {f}", fg="green")
+
+        if not dry_run:
+            total = sum(
+                int(round((plan.window[1] - plan.window[0]) * r.sample_rate)) for r in to_render
+            )
+            with click.progressbar(length=total, label="Synthesizing", show_eta=True) as bar:
+                results, timing = synthesize(plan, out, workers=workers, progress=bar.update)
+            for r in results:
+                click.secho(f"✓ {r.meta_path} ({r.annotations} annotations)", fg="green")
+                if r.clipped:
+                    click.secho(f"  ⚠ {r.clipped} clipped I/Q components", fg="yellow")
+            click.echo(
+                f"  {timing['samples'] / 1e6:.1f} MS in {timing['render_s']:.1f}s "
+                f"({timing['msps']:.2f} MS/s, {timing['workers']} workers)"
+            )
+            manifest["mode"] = "iq"
+            manifest["synthesis"] = {
+                "skipped_sensors": skipped,
+                "recordings": [
+                    {
+                        "recording": r.name,
+                        "data": str(r.data_path.relative_to(out)),
+                        "meta": str(r.meta_path.relative_to(out)),
+                        "samples": r.n_samples,
+                        "bytes": r.bytes,
+                        "emissions_rendered": r.rows,
+                        "annotations": r.annotations,
+                        "clipped_components": r.clipped,
+                    }
+                    for r in results
+                ],
+                "timing": {
+                    k: round(v, 3) if isinstance(v, float) else v for k, v in timing.items()
+                },
+            }
+            manifest_path.write_text(json.dumps(manifest, indent=2))
         click.secho(f"✓ {manifest_path}", fg="green")
 
     except (ConfigError, ValueError, RuntimeError) as e:

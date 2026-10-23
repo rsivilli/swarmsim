@@ -1,5 +1,6 @@
-name: "RF mix — FPV, DJI and silent drones vs three RF sensors"
-# RF example: run with `modsim rf scenarios/rf_fpv_mix.yaml --dry-run`
+name: "RF mix — FPV, DJI and silent drones vs four RF sensors"
+# RF example: `modsim rf scenarios/rf_fpv_mix.yaml --dry-run`, or synthesize a short window:
+# `modsim rf scenarios/rf_fpv_mix.yaml --window 0:2 --sensors RF-01,RF-04`
 area:
   width_km: 10.0
   height_km: 10.0
@@ -123,4 +124,15 @@ rf_sensors:
         - {name: ism5g8, center_hz: 5.795e9, sample_rate: 100.0e6}
       dwell_ms: 50
       retune_ms: 1
+    detector: {threshold_snr_db: 6}
+
+  - id: RF-04
+    position: [3.0, 3.5, 0.008]
+    type: detect
+    receiver: {noise_figure_db: 6, sample_format: ci16_le, adc_bits: 12, antenna_gain_dbi: 3}
+    tuning:
+      mode: multi
+      bands:
+        - {name: fpv_r5, center_hz: 5.806e9, sample_rate: 40.0e6}
+        - {name: ism2g4, center_hz: 2.442e9, sample_rate: 100.0e6}
     detector: {threshold_snr_db: 6}

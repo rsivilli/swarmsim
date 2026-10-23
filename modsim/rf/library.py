@@ -100,6 +100,7 @@ def parse_profile(raw: dict) -> LinkProfile:
         role_params={k: dict(v or {}) for k, v in (raw.get("role_params") or {}).items()},
         calibration=raw.get("calibration", "provisional"),
         sources=list(raw.get("sources") or []),
+        signal=dict(raw.get("signal") or {}),
     )
 
 
@@ -153,6 +154,7 @@ def _profile_to_raw(p: LinkProfile) -> dict:
         "role_params": copy.deepcopy(p.role_params),
         "calibration": p.calibration,
         "sources": list(p.sources),
+        "signal": dict(p.signal),
     }
 
 

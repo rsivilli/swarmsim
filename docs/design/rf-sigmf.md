@@ -1,6 +1,6 @@
 # Design: RF emitter simulation and SigMF IQ generation
 
-Status: **Phase 0 implemented**; phases 1–5 not started. The open questions from the first draft
+Status: **Phases 0–1 implemented**; phases 2–5 not started. The open questions from the first draft
 have been resolved (§14).
 
 ## 1. Summary
@@ -202,7 +202,8 @@ rf_sensors:
       noise_figure_db: 7
       sample_format: ci16_le            # any SigMF real/complex int/float type
       adc_bits: 14                      # quantization model (ci16 container)
-      full_scale_dbm: -10               # ADC clipping point
+      full_scale_dbm: auto              # ADC clipping point; auto = noise floor + headroom_db
+      headroom_db: 50                   # used when full_scale_dbm is auto
       gain_mode: fixed                  # "fixed" | "agc"
       impairments:
         lo_offset_ppm: 0.5
@@ -476,7 +477,7 @@ framing, TDOA network sensors, a GPU backend, and a Kubernetes job runner.
 | Phase | Scope | Exit criteria |
 |---|---|---|
 | **0: Plumbing and truth** ✅ | Models, YAML parsing and validation, profile library, controllers, silent drones, Stage A scheduler, link budget, detectability, parquet truth, `--dry-run` sizing | `modsim rf --dry-run` produces truth tables and sizing for a sample scenario; unit tests for path loss, horizon, scheduling |
-| **1: Single-channel IQ** | Fixed tuning, noise + FSPL + Doppler, `lora` + `fm` waveforms (ELRS, analog FPV), chunked multiprocess writer, SigMF writer, determinism | Measured in-band SNR matches the link budget within ±0.5 dB; Doppler tone within ±1 Hz; output byte-identical for 1 vs N workers; `sigmf` validation passes; throughput benchmark recorded |
+| **1: Single-channel IQ** ✅ | Fixed tuning, noise + FSPL + Doppler, `lora` + `fm` waveforms (ELRS, analog FPV), chunked multiprocess writer, SigMF writer, determinism | Measured in-band SNR matches the link budget within ±0.5 dB; Doppler tone within ±1 Hz; output byte-identical for 1 vs N workers; `sigmf` validation passes; throughput benchmark recorded |
 | **2: Remaining profiles + clutter** | `ofdm` + `fsk` waveforms (DJI, Wi-Fi, Remote ID BLE/Wi-Fi), background RF, CSMA traffic, annotation granularity modes | Spectrogram/occupancy checks per profile against reference shapes; annotations line up with energy in the spectrogram |
 | **3: Arrays and DF** | Array steering, element patterns, calibration error, spatial annotations, multichannel SigMF | A MUSIC/Bartlett estimator in the test suite recovers synthetic bearings within tolerance at high SNR |
 | **4: Realism and tuning modes** | Two-ray, Rician/TDL fading, receiver impairments, AGC/ADC clipping, multi-band and scanning tuning | Fading statistics match the target K-factor; scanning recordings have correct `captures` segments; clipping is counted |
@@ -508,6 +509,52 @@ Where the Phase 0 code differs from, or adds detail to, the design above:
   allocation and truth writing, which Phase 5 can optimize.
 - **Example:** `scenarios/rf_fpv_mix.yaml` (FPV/ELRS, DJI, silent drones, background Wi-Fi/BLE; fixed,
   multi-band DF and scanning sensors).
+
+### Phase 1 implementation notes
+
+- **Signal model:** every waveform is a closed-form function of the time since its emission
+  started. A sensor sample at time t evaluates it at t − τ(t), where τ(t) = r(t)/c, and multiplies by
+  the carrier phase 2π(f_e − f_c)(t − t₀) − 2π f_e τ(t). Propagation delay and Doppler are therefore
+  exact, and every chunk renders independently. Range, delay and amplitude are computed on a 1 ms
+  grid and interpolated linearly, which is exact between grid points for modsim's
+  constant-velocity motion.
+- **Waveforms:** `lora` (preamble, sync, 2.25-symbol SFD, random payload; phase-continuous chirps),
+  `fm` (NTSC-like composite video with a 6.5 MHz audio subcarrier, 4.5 MHz peak deviation) and `cw`
+  are protocol-like. `ofdm` and `fsk` profiles (DJI, Wi-Fi, Remote ID, BLE, SiK) are rendered as
+  band-limited noise placeholders with the right power, bandwidth and timing until Phase 2;
+  annotations mark them `swarmsim:waveform_fidelity: placeholder`.
+- **Band edges:** emissions reaching beyond ±0.45·fs are rendered oversampled and decimated with
+  `scipy.signal.resample_poly`, so only their in-band part lands in the recording and nothing
+  aliases.
+- **Receiver:** thermal noise at kTB·NF over the sample rate. Full scale defaults to `auto`
+  (noise + `headroom_db`, 50 dB), roughly how a fixed-gain front end would be set. Integer samples are
+  LSB-justified at `adc_bits`, and clipping is counted per recording
+  (`swarmsim:clipped_components`). The other impairments remain Phase 4.
+- **Supported sensors:** single-element sensors with `fixed` or `multi` tuning. Array (Phase 3) and
+  scanning (Phase 4) sensors still get truth tables but are skipped for synthesis, with the reason
+  listed in the CLI output and in `manifest.json`.
+- **SigMF:** spec v1.2.6, validated with `sigmf-python` in the test suite. Annotations use the
+  `signal` extension (`signal:detail` from each profile's `signal:` block, plus `signal:emitter`
+  with seid, label, EIRP and GeoJSON position) and the `swarmsim` namespace for the remaining truth.
+  `rf.annotations.max_gap_s` (default 50 ms) splits dwell annotations at silences. Each sensor gets
+  a `.sigmf-collection` whose streams carry SHA-512 hashes of the `.sigmf-meta` files.
+- **Determinism:** each chunk's noise and every emission's random content are seeded from
+  `(scenario seed, recording, chunk)` and `(emission seed)`. Output is byte-identical for any
+  `--workers` count. Changing `rf.chunk_samples` changes the noise realization.
+- **Measured accuracy** (tests): CW power within 0.5 dB of the link budget; LoRa burst energy within
+  0.5 dB; Doppler of a 30 m/s receding emitter within 1 Hz (−91.58 Hz at 915.2 MHz); noise floor
+  within 0.3 dB of kTB·NF; band-edge alias rejection > 40 dB.
+- **Throughput** (`scenarios/rf_fpv_mix.yaml`, 1 s window, 4-core container):
+
+  | Recording | Content | 1 worker | 4 workers |
+  |---|---|---|---|
+  | RF-01 915 MHz, 30 MS/s | 12 ELRS radios (3–4 overlapping bursts per sample) | 3.6 MS/s | 6.9 MS/s |
+  | RF-04 5.8 GHz, 40 MS/s | 6 continuous analog FPV + 2 DJI downlinks | 0.64 MS/s | 1.96 MS/s |
+
+  Cost scales with the number of emission samples, not recording samples, so dense bands are slower.
+  Known hotspots for Phase 5: the per-burst FFTs of noise placeholders (2.4 GHz with hundreds of
+  background APs runs at about 1.7 MS/s with 4 workers) and anti-alias decimation of band-edge
+  bursts.
 
 ## 13. Testing strategy
 

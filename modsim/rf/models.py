@@ -75,6 +75,7 @@ class LinkProfile:
     role_params: dict[str, dict] = field(default_factory=dict)  # per-role param overrides
     calibration: str = "provisional"
     sources: list[str] = field(default_factory=list)
+    signal: dict = field(default_factory=dict)  # SigMF `signal:detail` fields for annotations
 
     @property
     def silent(self) -> bool:
@@ -150,7 +151,8 @@ class ReceiverConfig:
     noise_figure_db: float = 7.0
     sample_format: str = "ci16_le"
     adc_bits: int | None = None
-    full_scale_dbm: float = -10.0
+    full_scale_dbm: float | None = None  # None = auto: noise floor (over fs) + headroom_db
+    headroom_db: float = 50.0
     gain_mode: str = "fixed"
     antenna_gain_dbi: float = 0.0  # single-element antenna gain (ignored when an array is set)
     impairments: dict = field(default_factory=dict)  # stored now, applied from Phase 4
@@ -216,6 +218,7 @@ class RFConfig:
     chunk_samples: int = 4_194_304
     cull_snr_db: float = -15.0
     annotation_granularity: AnnotationGranularity = AnnotationGranularity.DWELL
+    annotation_max_gap_s: float = 0.05  # dwell grouping: split when the gap exceeds this
     k_factor: float = 4.0 / 3.0  # effective earth radius factor for the radio horizon
     background: list[BackgroundConfig] = field(default_factory=list)
     profiles: dict[str, dict] = field(default_factory=dict)  # scenario-local profile overrides

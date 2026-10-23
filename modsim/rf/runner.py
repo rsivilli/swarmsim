@@ -1,4 +1,4 @@
-"""Orchestration of the RF pass (Phase 0: emission schedule, link budget, truth and sizing)."""
+"""Orchestration of the RF pass: emission schedule, link budget, truth tables and sizing."""
 
 from __future__ import annotations
 
@@ -152,7 +152,7 @@ def build_manifest(plan: RFPlan, scenario_path: str | Path | None, files: list[P
         sha = hashlib.sha256(Path(scenario_path).read_bytes()).hexdigest()
     return {
         "modsim_version": __version__,
-        "phase": "0 (schedule, link budget, truth tables and sizing; no IQ)",
+        "mode": "plan",  # becomes "iq" once recordings are synthesized
         "scenario": cfg.name,
         "scenario_file": str(scenario_path) if scenario_path else None,
         "scenario_sha256": sha,

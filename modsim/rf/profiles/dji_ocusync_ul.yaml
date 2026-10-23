@@ -14,6 +14,7 @@ activity:
       tlm_ratio: 0
       slot_owner: all
       airtime_s: 0.0006
+signal: {type: digital, standard: DJI OcuSync, spreading: fhss}
 calibration: provisional
 sources:
   - FCC ID test reports for DJI remote controllers (bands, output power)
