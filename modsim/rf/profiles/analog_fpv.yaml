@@ -1,0 +1,18 @@
+id: analog_fpv
+description: Analog FPV video transmitter (continuous FM video, 5.8 GHz raceband / Fatshark bands)
+waveform: fm
+bandwidth_hz: 18000000
+power_dbm: 23
+antenna_gain_dbi: 2
+roles: [drone]
+channels_mhz: [5658, 5695, 5732, 5769, 5806, 5843, 5880, 5917, 5740, 5760, 5780, 5800, 5820, 5840, 5860, 5880]
+channel_names: [R1, R2, R3, R4, R5, R6, R7, R8, F1, F2, F3, F4, F5, F6, F7, F8]
+activity:
+  - model: continuous
+    params:
+      channel: R1
+signal: {type: analog, mod_class: fm, standard: analog FPV video}
+calibration: provisional
+sources:
+  - Published 5.8 GHz FPV channel tables (Raceband, Fatshark)
+  - VTX manufacturer datasheets (25-1000 mW power levels); occupied bandwidth from Carson's rule for FM video

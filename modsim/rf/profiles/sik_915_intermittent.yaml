@@ -1,0 +1,18 @@
+id: sik_915_intermittent
+description: Mostly-autonomous drone sending occasional short telemetry bursts on a 915 MHz SiK-style FHSS radio
+waveform: fsk
+bandwidth_hz: 200000
+power_dbm: 20
+antenna_gain_dbi: 2
+roles: [drone]
+channels_mhz: {start: 902.5, step: 0.5, count: 50}
+activity:
+  - model: intermittent
+    params:
+      interval_s: 10.0
+      burst_s: 0.05
+      jitter_s: 2.0
+signal: {type: digital, standard: SiK telemetry, mod_class: fsk, class_variant: GFSK, spreading: fhss}
+calibration: provisional
+sources:
+  - SiK radio firmware documentation (915 MHz FHSS, GFSK, 20 dBm)

@@ -1,0 +1,21 @@
+id: dji_ocusync_ul
+description: DJI OcuSync / O3 / O4 control uplink from the remote controller (narrowband hopping bursts)
+waveform: ofdm
+bandwidth_hz: 1400000
+power_dbm: 23
+antenna_gain_dbi: 3
+roles: [controller]
+channels_mhz: {start: 2403.0, step: 2.0, count: 39}
+activity:
+  - model: periodic_hopping
+    params:
+      packet_rate_hz: 100
+      hop_interval_packets: 1
+      tlm_ratio: 0
+      slot_owner: all
+      airtime_s: 0.0006
+signal: {type: digital, standard: DJI OcuSync, spreading: fhss}
+calibration: provisional
+sources:
+  - FCC ID test reports for DJI remote controllers (bands, output power)
+  - Published academic analyses of OcuSync uplink hopping; burst length and rate approximated

@@ -23,9 +23,18 @@ loadtest = [
 udl = [
     "udl-sdk>=0.1.0a34",
 ]
+rf = [
+    "pyarrow>=17",
+    "sigmf>=1.2",
+]
 
 [dependency-groups]
-dev = ["pytest>=8.0", "ruff>=0.15"]
+dev = [
+    "pyarrow>=17",
+    "pytest>=8.0",
+    "ruff>=0.15",
+    "sigmf>=1.2",
+]
 
 [project.scripts]
 modsim = "modsim.cli_entry:main"

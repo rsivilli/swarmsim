@@ -1,0 +1,11 @@
+id: silent
+description: Non-emitting drone (pre-programmed autonomous flight, no RF links)
+waveform: none
+bandwidth_hz: 0
+power_dbm: 0
+antenna_gain_dbi: 0
+roles: [drone, controller]
+channels_mhz: []
+activity: []
+calibration: n/a
+sources: []
