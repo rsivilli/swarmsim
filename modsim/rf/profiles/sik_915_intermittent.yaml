@@ -12,6 +12,7 @@ activity:
       interval_s: 10.0
       burst_s: 0.05
       jitter_s: 2.0
+waveform_params: {bit_rate: 64000, h: 1.0, bt: 0.5, preamble: "aaaaaaaa", sync: "2dd4"}
 signal: {type: digital, standard: SiK telemetry, mod_class: fsk, class_variant: GFSK, spreading: fhss}
 calibration: provisional
 sources:

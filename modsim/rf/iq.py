@@ -43,7 +43,7 @@ class RecordingResult:
 
 def _waveform_params(plan: RFPlan, emitter_idx: int) -> dict:
     em = plan.emitters[emitter_idx]
-    params = {}
+    params = {"waveform": dict(plan.cfg.rf.library[em.profile_id].waveform_params)}
     for comp in em.params["activity"]:
         if "lora" in comp.params:
             params["lora"] = dict(comp.params["lora"])

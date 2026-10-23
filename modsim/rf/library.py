@@ -9,6 +9,7 @@ import yaml
 
 from ..validators import suggest_typo_fixes
 from .models import ActivityComponent, LinkProfile
+from .waveforms import OFDM_CHOICES, WAVEFORM_PARAMS
 
 # Allowed parameters per activity model (validated when profiles load and when
 # scenarios override them)
@@ -77,6 +78,27 @@ def parse_profile(raw: dict) -> LinkProfile:
         if role not in ROLES:
             raise ValueError(f"Profile '{pid}': unknown role '{role}'")
 
+    waveform = raw.get("waveform", "none")
+    if waveform not in WAVEFORM_PARAMS:
+        raise ValueError(
+            f"Profile '{pid}': waveform {suggest_typo_fixes(str(waveform), sorted(WAVEFORM_PARAMS))}"
+        )
+    waveform_params = dict(raw.get("waveform_params") or {})
+    for key in waveform_params:
+        if key not in WAVEFORM_PARAMS[waveform]:
+            raise ValueError(
+                f"Profile '{pid}', waveform '{waveform}': "
+                f"{suggest_typo_fixes(key, sorted(WAVEFORM_PARAMS[waveform]))}"
+            )
+    if waveform == "fsk" and "bit_rate" not in waveform_params:
+        raise ValueError(f"Profile '{pid}': fsk waveforms need waveform_params.bit_rate")
+    for key, allowed in OFDM_CHOICES.items():
+        value = waveform_params.get(key)
+        if waveform == "ofdm" and value is not None and value not in allowed:
+            raise ValueError(
+                f"Profile '{pid}': waveform_params.{key} {suggest_typo_fixes(str(value), sorted(allowed))}"
+            )
+
     channels = _expand_channels(raw.get("channels_mhz"))
     names = raw.get("channel_names")
     if names is not None:
@@ -89,7 +111,7 @@ def parse_profile(raw: dict) -> LinkProfile:
     return LinkProfile(
         profile_id=pid,
         description=raw.get("description", ""),
-        waveform=raw.get("waveform", "none"),
+        waveform=waveform,
         bandwidth_hz=float(raw.get("bandwidth_hz", 0.0)),
         power_dbm=float(raw.get("power_dbm", 0.0)),
         antenna_gain_dbi=float(raw.get("antenna_gain_dbi", 0.0)),
@@ -101,6 +123,7 @@ def parse_profile(raw: dict) -> LinkProfile:
         calibration=raw.get("calibration", "provisional"),
         sources=list(raw.get("sources") or []),
         signal=dict(raw.get("signal") or {}),
+        waveform_params=waveform_params,
     )
 
 
@@ -155,6 +178,7 @@ def _profile_to_raw(p: LinkProfile) -> dict:
         "calibration": p.calibration,
         "sources": list(p.sources),
         "signal": dict(p.signal),
+        "waveform_params": copy.deepcopy(p.waveform_params),
     }
 
 
