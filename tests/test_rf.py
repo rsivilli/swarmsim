@@ -267,6 +267,16 @@ class TestScheduler:
         # frames do not overlap
         assert np.all(e.t_start[1:] >= e.t_start[:-1] + e.duration[:-1] - 1e-12)
 
+    def test_csma_window_shorter_than_first_gap(self):
+        # 5% load with ~0.8 ms frames: mean gap ~15 ms, far longer than a 0.1 ms window
+        traffic = resolve_params(LIB["wifi_ap"], "background", None)
+        traffic["activity"] = [traffic["activity"][1]]
+        for seed in range(20):
+            em = emitter("wifi_ap", "background", active=(0.0, 1e-4), link_key=f"ap{seed}")
+            em.params = traffic
+            e = schedule_emitter(em, 0, LIB["wifi_ap"], seed)
+            assert (e.t_start + e.duration).max(initial=0.0) <= 1e-4
+
     def test_wifi_ap_components_share_random_channel(self):
         e = schedule_emitter(
             emitter("wifi_ap", "background", link_key="bg/ap"), 0, LIB["wifi_ap"], 1

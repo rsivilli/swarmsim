@@ -638,7 +638,11 @@ built-in emitting profile is now `protocol_like`.
   - Measured inter-channel phases match the recorded calibration truth within 0.5°, and
     correcting with that truth restores 0.2° accuracy.
 - **Throughput** (RF-02 in `rf_fpv_mix.yaml`: 4-element UCA, 2.4 GHz, 100 MS/s per channel,
-  about 560 background emitters): measurement pending.
+  about 560 background emitters): 0.91 MS/s of channel samples with 1 worker, 2.04 MS/s with 4,
+  byte-identical. Wi-Fi bursts take the per-element path, so this band costs roughly N× a
+  single-element sensor; caching the rendered reference waveform per burst is a Phase 5 target.
+- **Fix:** CSMA traffic scheduling no longer fails when a window is shorter than the first
+  inter-frame gap.
 
 ## 13. Testing strategy
 
