@@ -151,17 +151,41 @@ class ArrayConfig:
 
 
 @dataclass
+class PropagationConfig:
+    """Large- and small-scale channel effects (all off by default: free space only)."""
+
+    ground_reflection: bool = False  # two-ray: render the ground-reflected path
+    ground_permittivity: float = 15.0  # relative permittivity (average ground)
+    ground_conductivity_s_m: float = 0.005
+    polarization: str = "vertical"  # "vertical" | "horizontal"
+    shadowing_db: float = 0.0  # log-normal shadowing σ
+    shadowing_decorrelation_m: float = 50.0  # Gudmundson decorrelation distance
+    fading: str = "none"  # "none" | "rician"
+    rician_k_db: tuple[float, float] = (3.0, 15.0)  # K at 0° and 90° elevation (linear in between)
+    fading_min_doppler_hz: float = 1.0  # floor for static links (moving scatterers)
+    fading_paths: int = 16  # sinusoids in the diffuse (scattered) component
+
+
+@dataclass
+class AGCConfig:
+    target_dbfs: float = -20.0  # block RMS target (all channels)
+    block_samples: int = 4096  # gain updates on blocks aligned to absolute sample index
+    step_db: float = 1.0  # gain resolution
+    min_gain_db: float = -40.0  # relative to the fixed full-scale setting
+    max_gain_db: float = 40.0
+
+
+@dataclass
 class ReceiverConfig:
     noise_figure_db: float = 7.0
     sample_format: str = "ci16_le"
     adc_bits: int | None = None
     full_scale_dbm: float | None = None  # None = auto: noise floor (over fs) + headroom_db
     headroom_db: float = 50.0
-    gain_mode: str = "fixed"
+    gain_mode: str = "fixed"  # "fixed" | "agc"
+    agc: AGCConfig = field(default_factory=AGCConfig)
     antenna_gain_dbi: float = 0.0  # single-element antenna gain (ignored when an array is set)
-    impairments: dict = field(
-        default_factory=dict
-    )  # channel_mismatch applied (Phase 3); rest Phase 4
+    impairments: dict = field(default_factory=dict)  # see config.IMPAIRMENT_KEYS
 
 
 @dataclass
@@ -228,6 +252,7 @@ class RFConfig:
     k_factor: float = 4.0 / 3.0  # effective earth radius factor for the radio horizon
     background: list[BackgroundConfig] = field(default_factory=list)
     profiles: dict[str, dict] = field(default_factory=dict)  # scenario-local profile overrides
+    propagation: PropagationConfig = field(default_factory=PropagationConfig)
 
 
 @dataclass

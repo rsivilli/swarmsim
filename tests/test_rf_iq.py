@@ -381,20 +381,18 @@ class TestCLI:
             cli, ["rf", str(p), "--out", str(out), "--workers", "1", "--truth-format", "csv"]
         )
         assert result.exit_code == 0, result.output
-        assert "not synthesized: scanning tuning" in result.output
         manifest = json.loads((out / "manifest.json").read_text())
         assert manifest["mode"] == "iq"
-        assert manifest["synthesis"]["skipped_sensors"] == {
-            "SCAN": "scanning tuning is synthesized from Phase 4"
-        }
+        names = {r["recording"] for r in manifest["synthesis"]["recordings"]}
+        assert names == {"S_b", "SCAN_scan"}
         assert (out / "S" / "S_b.sigmf-data").stat().st_size == 2_000_000 * 8
-        assert not (out / "SCAN").exists()
+        assert (out / "SCAN" / "SCAN_scan.sigmf-data").stat().st_size == 2_000_000 * 4
 
-    def test_errors_when_nothing_can_be_synthesized(self, tmp_path, cli_runner):
+    def test_errors_without_rf_sensors(self, tmp_path, cli_runner):
         raw = base()
-        raw["rf_sensors"][0]["tuning"] = SCAN_TUNING
+        raw["rf_sensors"] = []
         p = tmp_path / "s.yaml"
         p.write_text(yaml.safe_dump(raw))
         result = cli_runner.invoke(cli, ["rf", str(p), "--out", str(tmp_path / "o")])
         assert result.exit_code == 1
-        assert "No RF sensor can be synthesized" in result.output
+        assert "no RF sensors" in result.output

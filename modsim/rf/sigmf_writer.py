@@ -131,6 +131,9 @@ def build_annotations(
             "swarmsim:detectable": bool(detectable[g]),
             "swarmsim:waveform_fidelity": fidelity(prof.waveform),
         }
+        for key in ("two_ray_db", "shadow_db", "fade_db"):
+            if key in r and r[key][i] != 0:
+                ann[f"swarmsim:{key}"] = round(float(r[key][i]), 2)
         if array is not None:
             ann["spatial:signal_bearing"] = {
                 "azimuth": round(float(relative_azimuth(array, r["azimuth_deg"][i])), 3),
@@ -161,7 +164,16 @@ def build_meta(
     window: tuple[float, float],
     origin: tuple[float, float] | None,
     channel_gain: np.ndarray | None = None,
+    captures: list[tuple[int, float]] | None = None,
+    retunes: list[tuple[int, int]] | None = None,
+    impairments: dict | None = None,
+    propagation=None,
 ) -> dict:
+    """Global, captures and annotations for one recording.
+
+    ``captures`` lists (sample_start, frequency) per capture segment (one per dwell slot when
+    scanning); ``retunes`` lists zero-filled retune spans, annotated as ``swarmsim:retune``.
+    """
     p = sensor.position
     arr = sensor.array
     glob = {
@@ -186,14 +198,41 @@ def build_meta(
         "swarmsim:adc_bits": receiver.adc_bits,
         "swarmsim:clipped_components": clipped,
     }
+    glob.update(impairments or {})
+    if propagation is not None:
+        glob["swarmsim:propagation"] = {
+            "ground_reflection": propagation.ground_reflection,
+            "shadowing_db": propagation.shadowing_db,
+            "fading": propagation.fading,
+            "rician_k_db": list(propagation.rician_k_db),
+        }
     geo = _geojson(p.x, p.y, p.z, origin)
     if geo:
         glob["core:geolocation"] = geo
-    capture = {
-        "core:sample_start": 0,
-        "core:frequency": float(center_hz),
-        "core:datetime": iso_utc(epoch, t0),
-    }
+    capture_list = []
+    for start, freq in captures or [(0, center_hz)]:
+        capture_list.append(
+            {
+                "core:sample_start": int(start),
+                "core:frequency": float(freq),
+                "core:datetime": iso_utc(epoch, t0 + start / sample_rate),
+            }
+        )
+    capture = capture_list[0]
+    if retunes:
+        annotations = sorted(
+            annotations
+            + [
+                {
+                    "core:sample_start": int(a),
+                    "core:sample_count": int(b - a),
+                    "core:label": "retune",
+                    "swarmsim:retune": True,
+                }
+                for a, b in retunes
+            ],
+            key=lambda x: x["core:sample_start"],
+        )
     if arr:
         glob["spatial:num_elements"] = arr.elements
         glob["spatial:channel_index"] = 0
@@ -206,9 +245,10 @@ def build_meta(
             glob["swarmsim:channel_phase_deg"] = [
                 round(float(v), 4) for v in np.degrees(np.angle(channel_gain))
             ]
-        capture["spatial:aperture_azimuth"] = float(arr.boresight_deg)
+        for cap in capture_list:
+            cap["spatial:aperture_azimuth"] = float(arr.boresight_deg)
         capture["spatial:element_geometry"] = _element_geometry(arr)
-    return {"global": glob, "captures": [capture], "annotations": annotations}
+    return {"global": glob, "captures": capture_list, "annotations": annotations}
 
 
 def write_json(path: Path, obj: dict) -> None:

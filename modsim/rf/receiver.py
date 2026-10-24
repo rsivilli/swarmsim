@@ -77,3 +77,56 @@ def build_receiver(rx: ReceiverConfig, sample_rate: float) -> ReceiverChain:
         adc_bits=adc_bits,
         numpy_dtype=dtype,
     )
+
+
+# ---------------------------------------------------------------------------
+# Impairments (Phase 4)
+# ---------------------------------------------------------------------------
+
+
+def phase_noise_boundaries(
+    n_chunks: int, chunk_samples: int, n_samples: int, linewidth_hz: float, fs: float, rng
+) -> np.ndarray:
+    """Wiener phase (rad) at every chunk boundary, drawn sequentially (length n_chunks + 1)."""
+    var = 2 * np.pi * linewidth_hz / fs  # per-sample phase increment variance
+    lengths = np.minimum(chunk_samples, n_samples - np.arange(n_chunks) * chunk_samples)
+    steps = rng.normal(0.0, 1.0, n_chunks) * np.sqrt(var * lengths)
+    return np.concatenate([[0.0], np.cumsum(steps)])
+
+
+def phase_noise_bridge(
+    w0: float, w1: float, n: int, linewidth_hz: float, fs: float, rng
+) -> np.ndarray:
+    """Wiener phase over one chunk as a Brownian bridge from w0 (first sample) to w1 (next
+    chunk's first sample), so chunks render independently with exact statistics."""
+    sigma = np.sqrt(2 * np.pi * linewidth_hz / fs)
+    steps = rng.normal(0.0, sigma, n)
+    walk = np.concatenate([[0.0], np.cumsum(steps)])  # length n + 1
+    j = np.arange(n + 1) / n
+    bridge = w0 + walk - j * (walk[-1] - (w1 - w0))
+    return bridge[:n]
+
+
+def apply_iq_imbalance(buf: np.ndarray, gain_db: float, phase_deg: float) -> None:
+    """In place: I' = I, Q' = g·(Q·cos φ − I·sin φ)."""
+    g = 10 ** (gain_db / 20)
+    phi = np.radians(phase_deg)
+    i = buf.real.copy()
+    q = buf.imag.copy()
+    buf.imag = (g * (q * np.cos(phi) - i * np.sin(phi))).astype(buf.real.dtype)
+
+
+def agc_gains_db(x_fs: np.ndarray, n0: int, block: int, agc) -> np.ndarray:
+    """Per-block AGC gain (dB) for samples already scaled to full scale.
+
+    Blocks are aligned to the absolute sample index (``n0`` must be a multiple of ``block``).
+    """
+    n = x_fs.shape[0]
+    n_blocks = -(-n // block)
+    power = np.abs(x_fs.reshape(n, -1)) ** 2
+    pad = n_blocks * block - n
+    if pad:
+        power = np.concatenate([power, np.full((pad, power.shape[1]), np.nan)])
+    rms_db = 10 * np.log10(np.maximum(np.nanmean(power.reshape(n_blocks, -1), axis=1), 1e-30))
+    gain = agc.step_db * np.round((agc.target_dbfs - rms_db) / agc.step_db)
+    return np.clip(gain, agc.min_gain_db, agc.max_gain_db)
