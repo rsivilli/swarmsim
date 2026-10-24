@@ -633,11 +633,9 @@ def rf_cmd(
     """Simulate RF emitters and RF sensors, writing SigMF recordings.
 
     Writes ground-truth tables (emitters, emissions, links) and a manifest, then
-    synthesizes IQ for each sensor band as SigMF (.sigmf-data / .sigmf-meta,
-    plus a .sigmf-collection per sensor). --dry-run stops before synthesis.
-
-    Sensors with antenna arrays (Phase 3) or scanning tuning (Phase 4) are
-    included in the truth tables but not synthesized yet.
+    synthesizes IQ as SigMF (.sigmf-data / .sigmf-meta, plus a .sigmf-collection
+    per sensor): one recording per band for fixed/multi tuning, one per sensor
+    when scanning. --dry-run stops before synthesis.
 
     Example:
         modsim rf scenarios/rf_fpv_mix.yaml --dry-run
@@ -645,7 +643,7 @@ def rf_cmd(
     """
     import json
 
-    from .rf.iq import synthesize, unsupported_reason
+    from .rf.iq import synthesize
     from .rf.runner import plan_rf, write_outputs
     from .rf.sizing import format_bytes, free_bytes
 
@@ -657,10 +655,7 @@ def rf_cmd(
         sensor_ids = [s.strip() for s in sensors.split(",")] if sensors else None
 
         plan = plan_rf(cfg, window=_parse_window(window), sensor_ids=sensor_ids)
-        skipped = {s.sensor_id: unsupported_reason(s) for s in plan.sensors}
-        skipped = {k: v for k, v in skipped.items() if v}
-        to_render = [r for r in plan.recordings if r.sensor_id not in skipped]
-        iq_bytes = sum(r.total_bytes for r in to_render)
+        iq_bytes = plan.total_bytes
 
         free = free_bytes(out)
         click.echo(f"RF plan: {cfg.name}")
@@ -674,10 +669,9 @@ def rf_cmd(
         )
         click.echo("  Recordings:")
         for r in plan.recordings:
-            note = f"  (not synthesized: {skipped[r.sensor_id]})" if r.sensor_id in skipped else ""
             click.echo(
                 f"    {r.recording}: {r.sample_rate / 1e6:g} MS/s × {r.num_channels} ch "
-                f"{r.sample_format} → {format_bytes(r.total_bytes)}{note}"
+                f"{r.sample_format} → {format_bytes(r.total_bytes)}"
             )
         click.echo(f"  IQ total:   {format_bytes(iq_bytes)} ({format_bytes(free)} free)")
         if iq_bytes > free:
@@ -687,11 +681,8 @@ def rf_cmd(
                     "or pass --force"
                 )
             click.secho("  ⚠ Estimated IQ output exceeds free disk space", fg="yellow")
-        if not dry_run and not to_render:
-            raise ConfigError(
-                "No RF sensor can be synthesized yet: "
-                + "; ".join(f"{k}: {v}" for k, v in skipped.items())
-            )
+        if not dry_run and not plan.recordings:
+            raise ConfigError("Scenario has no RF sensors to synthesize")
 
         files, manifest_path, manifest = write_outputs(plan, out, scenario, truth_format)
         click.echo()
@@ -700,7 +691,8 @@ def rf_cmd(
 
         if not dry_run:
             total = sum(
-                int(round((plan.window[1] - plan.window[0]) * r.sample_rate)) for r in to_render
+                int(round((plan.window[1] - plan.window[0]) * r.sample_rate))
+                for r in plan.recordings
             )
             with click.progressbar(length=total, label="Synthesizing", show_eta=True) as bar:
                 results, timing = synthesize(plan, out, workers=workers, progress=bar.update)
@@ -714,7 +706,6 @@ def rf_cmd(
             )
             manifest["mode"] = "iq"
             manifest["synthesis"] = {
-                "skipped_sensors": skipped,
                 "recordings": [
                     {
                         "recording": r.name,

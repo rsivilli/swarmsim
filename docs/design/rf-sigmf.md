@@ -1,6 +1,6 @@
 # Design: RF emitter simulation and SigMF IQ generation
 
-Status: **Phases 0–3 implemented**; phases 4–5 not started. The open questions from the first draft
+Status: **Phases 0–4 implemented**; phase 5 (performance) not started. The open questions from the first draft
 have been resolved (§14).
 
 ## 1. Summary
@@ -480,7 +480,7 @@ framing, TDOA network sensors, a GPU backend, and a Kubernetes job runner.
 | **1: Single-channel IQ** ✅ | Fixed tuning, noise + FSPL + Doppler, `lora` + `fm` waveforms (ELRS, analog FPV), chunked multiprocess writer, SigMF writer, determinism | Measured in-band SNR matches the link budget within ±0.5 dB; Doppler tone within ±1 Hz; output byte-identical for 1 vs N workers; `sigmf` validation passes; throughput benchmark recorded |
 | **2: Remaining profiles + clutter** ✅ | `ofdm` + `fsk` waveforms (DJI, Wi-Fi, Remote ID BLE/Wi-Fi), background RF, CSMA traffic, annotation granularity modes | Spectrogram/occupancy checks per profile against reference shapes; annotations line up with energy in the spectrogram |
 | **3: Arrays and DF** ✅ | Array steering, element patterns, calibration error, spatial annotations, multichannel SigMF | A MUSIC/Bartlett estimator in the test suite recovers synthetic bearings within tolerance at high SNR |
-| **4: Realism and tuning modes** | Two-ray, Rician/TDL fading, receiver impairments, AGC/ADC clipping, multi-band and scanning tuning | Fading statistics match the target K-factor; scanning recordings have correct `captures` segments; clipping is counted |
+| **4: Realism and tuning modes** ✅ | Two-ray, Rician/TDL fading, receiver impairments, AGC/ADC clipping, multi-band and scanning tuning | Fading statistics match the target K-factor; scanning recordings have correct `captures` segments; clipping is counted |
 | **5: Performance** | Template caching, coarse-grid channel, profiling, optional pyFFTW | Benchmarks published in the README next to the existing scaling table |
 
 ### Phase 0 implementation notes
@@ -643,6 +643,59 @@ built-in emitting profile is now `protocol_like`.
   single-element sensor; caching the rendered reference waveform per burst is a Phase 5 target.
 - **Fix:** CSMA traffic scheduling no longer fails when a window is shorter than the first
   inter-frame gap.
+
+### Phase 4 implementation notes
+
+All channel and receiver processes are closed-form in absolute time, or chunk-independent by
+construction, so outputs stay byte-identical across worker counts. Everything is off by default:
+scenarios without `rf.propagation` or `impairments` produce the same recordings as before.
+
+- **Ground reflection** (`rf.propagation.ground_reflection`): the reflected ray is rendered as a
+  real second path from the emitter's mirror image below flat ground (z = 0). It has its own delay,
+  Doppler, element delays and pattern direction, scaled by the Fresnel reflection coefficient
+  (ground permittivity, conductivity, polarization). Frequency-selective nulls emerge naturally.
+  The link budget adds the narrowband two-ray factor at the carrier (`two_ray_db`). Tests check
+  synthesized power through a null against it within 0.5 dB.
+- **Shadowing** (`shadowing_db`, `shadowing_decorrelation_m`): log-normal, per (emitter, sensor)
+  link, along travelled distance. It is a 32-sine sum with Cauchy spatial frequencies, giving an
+  exact exp(−Δs/d) autocorrelation (tests: σ within 8%, correlation e⁻¹ at d). Static emitters
+  get a constant per-link value. Included in `snr_db` and recorded as `shadow_db`.
+- **Rician fading** (`fading: rician`, `rician_k_db: [K at 0°, K at 90°]`, linear in dB with
+  elevation):
+  - The diffuse part is a sum of `fading_paths` rays with Doppler f_D·cos α and random phases
+    (Jakes-like). f_D = emitter speed·f/c, floored at `fading_min_doppler_hz`.
+  - Each ray also has a horizontal arrival azimuth, so array elements fade with realistic spatial
+    correlation.
+  - Evaluated on a grid of ≥ 20 points per Doppler period and interpolated.
+  - Links record the small-scale `fade_db` at each emission's mid-time; `detectable` uses
+    snr_db + fade_db.
+  - Tests: K recovered from the synthesized envelope within 1.5 dB; fading spectrum confined to
+    ±f_D; recorded fade matches the recording within 1 dB.
+- **Receiver impairments** (`receiver.impairments`), each with its truth in global metadata:
+  - `lo_offset_ppm`: drawn uniformly within ±ppm per sensor. A frequency error scaled to each
+    tuned frequency, common to all channels (`swarmsim:lo_offset_hz`). Tests: tone shift within 1 Hz.
+  - `phase_noise: {model: wiener, linewidth_hz}`: Wiener values at chunk boundaries are drawn in
+    sequence, and each chunk fills a Brownian bridge between them, giving exact statistics and
+    chunk independence. Tests: increment variance within 20%, no excess jump at chunk boundaries.
+  - `iq_imbalance: {gain_db, phase_deg}`: I' = I, Q' = g(Q cos φ − I sin φ). Tests: image
+    rejection within 0.5 dB of theory.
+  - `dc_offset_dbfs`: fixed magnitude, random phase per channel.
+  - Order: signal + noise → LO offset and phase noise → array calibration → IQ imbalance → DC →
+    AGC → ADC.
+- **AGC** (`gain_mode: agc`, `agc: {target_dbfs, block_samples, step_db, min/max_gain_db}`):
+  - Gain is set per block, aligned to the absolute sample index; `block_samples` must divide
+    `rf.chunk_samples`.
+  - The gain trace (dB per block) is written next to the recording as `<recording>.agc.npy` and
+    referenced by `swarmsim:agc_trace`.
+  - Tests: block RMS within ±0.6 dB of target with 1 dB steps.
+- **Scanning tuning** is now synthesized: one recording per sensor.
+  - One `captures` segment per slot (frequency, datetime). Each retune span is zero-filled and
+    annotated `swarmsim:retune`.
+  - Emissions are rendered only inside their band's dwells, at that band's centre frequency, and
+    their annotations are clipped to the dwells.
+  - The CLI no longer skips any sensor type.
+- **Sample scenario** (`rf_fpv_mix.yaml`) RF-03 (three-band scanner, 100 MS/s): 3.05 MS/s with 4
+  workers on a 0.3 s window; the recording validates with `sigmf-python`.
 
 ## 13. Testing strategy
 

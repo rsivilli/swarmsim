@@ -77,7 +77,17 @@ def plan_rf(
 
     t = time.perf_counter()
     states = emitter_states(emissions, emitters, trajectories)
-    links = compute_links(emissions, states, sensors, window, rfs.rf.cull_snr_db, rfs.rf.k_factor)
+    links = compute_links(
+        emissions,
+        states,
+        sensors,
+        window,
+        rfs.rf.cull_snr_db,
+        rfs.rf.k_factor,
+        emitters=emitters,
+        prop=rfs.rf.propagation,
+        scenario_seed=cfg.seed,
+    )
     timings["link_budget_s"] = time.perf_counter() - t
 
     duration = window[1] - window[0]
