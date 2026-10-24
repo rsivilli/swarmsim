@@ -255,14 +255,18 @@ communication:
 
 swarmsim is gaining an RF layer: drones, their ground controllers and background devices act as RF
 emitters with commercial link profiles, and RF sensors record SigMF IQ. See
-[docs/design/rf-sigmf.md](docs/design/rf-sigmf.md) for the full design. **Phases 0–2** are
+[docs/design/rf-sigmf.md](docs/design/rf-sigmf.md) for the full design. **Phases 0–3** are
 available now:
 
 - Every emission is scheduled, and each sensor gets a link budget (free-space loss, radio horizon,
   SNR, detectability, Doppler, bearing).
 - Ground-truth tables and IQ storage estimates are written for every run.
-- Single-element sensors with `fixed` or `multi` tuning get synthesized IQ as SigMF recordings, with
+- Sensors with `fixed` or `multi` tuning get synthesized IQ as SigMF recordings, with
   per-emission annotations.
+- Direction-finding sensors with ULA, UCA or custom antenna arrays record phase-coherent
+  multichannel IQ. That includes element patterns and optional per-channel calibration error.
+  Bearing truth goes in SigMF `spatial` annotations, and `modsim.rf.array.steering_vector` matches
+  the synthesizer's convention for DF algorithms.
 - All built-in links use protocol-like waveforms:
   - ExpressLRS/Crossfire: LoRa chirps.
   - Analog FPV: FM video.
@@ -270,7 +274,7 @@ available now:
   - Wi-Fi and Remote ID over Wi-Fi: 802.11 OFDM with the legacy preamble.
   - BLE, Remote ID over BLE and SiK: GFSK.
 
-  Arrays and scanning sensors arrive in Phases 3–4.
+  Scanning sensors arrive in Phase 4.
 
 ```bash
 uv sync --extra rf    # optional: pyarrow (Parquet truth) and sigmf-python
@@ -409,6 +413,7 @@ modsim/
     receiver.py         Thermal noise, full scale, ADC quantization and clipping
     iq.py               Recording jobs, multiprocess synthesis
     sigmf_writer.py     .sigmf-meta annotations and .sigmf-collection
+    array.py            Array geometry, element patterns, steering vectors (SigMF spatial frame)
 
 locust/
   locustfile.py         Timeline replay with REST, Zenoh native, and UDL transports

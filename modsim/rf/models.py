@@ -145,6 +145,9 @@ class ArrayConfig:
     element_positions_m: list[tuple[float, float, float]] | None = None  # custom
     boresight_deg: float = 0.0
     element_gain_dbi: float = 0.0
+    element_pattern: str = "isotropic"  # "isotropic" | "cosine"
+    pattern_exponent: float = 1.0  # cosine pattern: power ∝ cos^q(angle off element pointing)
+    back_lobe_db: float = -20.0  # cosine pattern floor
 
 
 @dataclass
@@ -156,7 +159,9 @@ class ReceiverConfig:
     headroom_db: float = 50.0
     gain_mode: str = "fixed"
     antenna_gain_dbi: float = 0.0  # single-element antenna gain (ignored when an array is set)
-    impairments: dict = field(default_factory=dict)  # stored now, applied from Phase 4
+    impairments: dict = field(
+        default_factory=dict
+    )  # channel_mismatch applied (Phase 3); rest Phase 4
 
 
 @dataclass

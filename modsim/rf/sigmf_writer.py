@@ -11,7 +11,8 @@ import numpy as np
 
 from .. import __version__
 from ..geo import km_to_latlon
-from .models import AnnotationGranularity, Emitter, LinkProfile, RFSensorConfig
+from .array import element_positions_local, relative_azimuth
+from .models import AnnotationGranularity, ArrayConfig, Emitter, LinkProfile, RFSensorConfig
 from .waveforms import fidelity
 
 SIGMF_VERSION = "1.2.6"
@@ -19,6 +20,11 @@ EXTENSIONS = [
     {"name": "signal", "version": "1.0.0", "optional": True},
     {"name": "swarmsim", "version": "0.1.0", "optional": True},
 ]
+SPATIAL_EXTENSION = {"name": "spatial", "version": "1.1.0", "optional": True}
+
+
+def _element_geometry(arr: ArrayConfig) -> list[dict]:
+    return [{"point": [round(float(v), 6) for v in p]} for p in element_positions_local(arr)]
 
 
 def iso_utc(epoch: str, offset_s: float) -> str:
@@ -44,10 +50,14 @@ def build_annotations(
     emitters: list[Emitter],
     library: dict[str, LinkProfile],
     origin: tuple[float, float] | None,
+    array: ArrayConfig | None = None,
 ) -> list[dict]:
     """Annotations for one recording, grouped per ``granularity`` and sorted by sample_start.
 
     ``rows`` holds one entry per rendered emission (link-table columns plus emission fields).
+    For array sensors, ``spatial:signal_bearing`` gives the bearing truth relative to the
+    aperture boresight (SigMF ``spatial`` convention) and ``spatial:emitter_location`` the
+    emitter position.
     """
     n = len(rows["t_start"])
     if n == 0:
@@ -121,6 +131,15 @@ def build_annotations(
             "swarmsim:detectable": bool(detectable[g]),
             "swarmsim:waveform_fidelity": fidelity(prof.waveform),
         }
+        if array is not None:
+            ann["spatial:signal_bearing"] = {
+                "azimuth": round(float(relative_azimuth(array, r["azimuth_deg"][i])), 3),
+                "elevation": round(float(r["elevation_deg"][i]), 3),
+                "range": round(float(r["range_m"][i]), 2),
+                "range_rate": round(float(r["radial_velocity_mps"][i]), 3) + 0.0,
+            }
+            if geo:
+                ann["spatial:emitter_location"] = geo
         annotations.append(ann)
     annotations.sort(key=lambda a: a["core:sample_start"])
     return annotations
@@ -141,8 +160,10 @@ def build_meta(
     seed: int | None,
     window: tuple[float, float],
     origin: tuple[float, float] | None,
+    channel_gain: np.ndarray | None = None,
 ) -> dict:
     p = sensor.position
+    arr = sensor.array
     glob = {
         "core:datatype": sensor.receiver.sample_format,
         "core:sample_rate": float(sample_rate),
@@ -154,7 +175,7 @@ def build_meta(
             f"(NF {sensor.receiver.noise_figure_db:g} dB, gain {sensor.rx_gain_dbi:g} dBi)"
         ),
         "core:description": f"{scenario_name}: {sensor.sensor_id} {band_name}",
-        "core:extensions": EXTENSIONS,
+        "core:extensions": EXTENSIONS + ([SPATIAL_EXTENSION] if arr else []),
         "swarmsim:sensor_id": sensor.sensor_id,
         "swarmsim:band": band_name,
         "swarmsim:scenario": scenario_name,
@@ -168,17 +189,26 @@ def build_meta(
     geo = _geojson(p.x, p.y, p.z, origin)
     if geo:
         glob["core:geolocation"] = geo
-    return {
-        "global": glob,
-        "captures": [
-            {
-                "core:sample_start": 0,
-                "core:frequency": float(center_hz),
-                "core:datetime": iso_utc(epoch, t0),
-            }
-        ],
-        "annotations": annotations,
+    capture = {
+        "core:sample_start": 0,
+        "core:frequency": float(center_hz),
+        "core:datetime": iso_utc(epoch, t0),
     }
+    if arr:
+        glob["spatial:num_elements"] = arr.elements
+        glob["spatial:channel_index"] = 0
+        glob["swarmsim:element_pattern"] = arr.element_pattern
+        if channel_gain is not None:
+            # Calibration truth: the per-channel gain/phase error applied before the ADC
+            glob["swarmsim:channel_gain_db"] = [
+                round(float(v), 4) for v in 20 * np.log10(np.abs(channel_gain))
+            ]
+            glob["swarmsim:channel_phase_deg"] = [
+                round(float(v), 4) for v in np.degrees(np.angle(channel_gain))
+            ]
+        capture["spatial:aperture_azimuth"] = float(arr.boresight_deg)
+        capture["spatial:element_geometry"] = _element_geometry(arr)
+    return {"global": glob, "captures": [capture], "annotations": annotations}
 
 
 def write_json(path: Path, obj: dict) -> None:
@@ -193,13 +223,12 @@ def write_collection(path: Path, sensor: RFSensorConfig, meta_paths: list[Path])
         }
         for m in meta_paths
     ]
-    write_json(
-        path,
-        {
-            "collection": {
-                "core:version": SIGMF_VERSION,
-                "core:description": f"swarmsim RF sensor {sensor.sensor_id}",
-                "core:streams": streams,
-            }
-        },
-    )
+    collection = {
+        "core:version": SIGMF_VERSION,
+        "core:description": f"swarmsim RF sensor {sensor.sensor_id}",
+        "core:streams": streams,
+    }
+    if sensor.array is not None:
+        collection["core:extensions"] = [SPATIAL_EXTENSION]
+        collection["spatial:element_geometry"] = _element_geometry(sensor.array)
+    write_json(path, {"collection": collection})

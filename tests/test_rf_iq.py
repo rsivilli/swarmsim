@@ -358,20 +358,21 @@ class TestSigMF:
 # ---------------------------------------------------------------------------
 
 
+SCAN_TUNING = {
+    "mode": "scanning",
+    "dwell_ms": 50,
+    "bands": [
+        {"name": "a", "center_hz": 9.15e8, "sample_rate": 1e6},
+        {"name": "b", "center_hz": 9.25e8, "sample_rate": 1e6},
+    ],
+}
+
+
 class TestCLI:
     def test_synthesizes_and_records_manifest(self, tmp_path, cli_runner):
         raw = base()
         raw["rf_sensors"].append(
-            {
-                "id": "DF",
-                "position": [2, 2, 0.01],
-                "type": "df",
-                "array": {"geometry": "uca", "elements": 4, "radius_m": 0.08},
-                "tuning": {
-                    "mode": "fixed",
-                    "bands": [{"name": "b", "center_hz": 9.15e8, "sample_rate": 1e6}],
-                },
-            }
+            {"id": "SCAN", "position": [2, 2, 0.01], "type": "detect", "tuning": SCAN_TUNING}
         )
         p = tmp_path / "s.yaml"
         p.write_text(yaml.safe_dump(raw))
@@ -380,18 +381,18 @@ class TestCLI:
             cli, ["rf", str(p), "--out", str(out), "--workers", "1", "--truth-format", "csv"]
         )
         assert result.exit_code == 0, result.output
-        assert "not synthesized: antenna arrays" in result.output
+        assert "not synthesized: scanning tuning" in result.output
         manifest = json.loads((out / "manifest.json").read_text())
         assert manifest["mode"] == "iq"
         assert manifest["synthesis"]["skipped_sensors"] == {
-            "DF": "antenna arrays are synthesized from Phase 3"
+            "SCAN": "scanning tuning is synthesized from Phase 4"
         }
         assert (out / "S" / "S_b.sigmf-data").stat().st_size == 2_000_000 * 8
-        assert not (out / "DF").exists()
+        assert not (out / "SCAN").exists()
 
     def test_errors_when_nothing_can_be_synthesized(self, tmp_path, cli_runner):
         raw = base()
-        raw["rf_sensors"][0]["array"] = {"geometry": "uca", "elements": 2, "radius_m": 0.05}
+        raw["rf_sensors"][0]["tuning"] = SCAN_TUNING
         p = tmp_path / "s.yaml"
         p.write_text(yaml.safe_dump(raw))
         result = cli_runner.invoke(cli, ["rf", str(p), "--out", str(tmp_path / "o")])

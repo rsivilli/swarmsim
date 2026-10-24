@@ -14,17 +14,26 @@ A(t) comes from the free-space link budget, g is a raised-cosine on/off ramp, an
 waveform. Range and amplitude are evaluated on a 1 ms grid and interpolated. Emissions that
 reach past ±0.45·fs are rendered oversampled and decimated with an anti-alias filter, so only
 their in-band part lands in the recording.
+
+Array sensors: each element i has its own delay τᵢ(t), computed from its exact world position
+(so near field is handled too), and an element-pattern amplitude. If the delay spread across the
+aperture is negligible for the emission's bandwidth (2π·B/2·max|τᵢ − τ| < 0.01 rad), the
+waveform is rendered once at the array centre and each element gets its exact carrier phase
+−2π f_e (τᵢ − τ). Otherwise every element is rendered at its own delay. Channels are interleaved
+per sample in the data file, as SigMF multichannel datasets are.
 """
 
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 from scipy.signal import resample_poly
 
+from .array import local_axes, pattern_power
 from .geometry import Trajectory
+from .models import ArrayConfig
 from .propagation import C_MPS, fspl_db
 from .receiver import ReceiverChain
 from .scheduler import make_rng
@@ -34,6 +43,7 @@ GEOMETRY_GRID_S = 1e-3
 RAMP_S = 2e-6
 ALIAS_LIMIT = 0.45  # fraction of fs an emission may reach before oversampling
 DECIMATION_GUARD = 32  # output samples rendered beyond each side when decimating
+NARROWBAND_RAD = 0.01  # max envelope phase error 2π·(B/2)·Δτ for single-render array steering
 
 
 @dataclass
@@ -73,11 +83,20 @@ class RecordingJob:
     tau_mid: np.ndarray  # propagation delay at emission mid-time (s)
     emitters: dict[int, EmitterInfo]
     trajectories: dict[str, Trajectory]
+    # Array sensors: element offsets from the sensor position (m, world ENU) and the array
+    # config for element patterns; single-element sensors have one zero offset and no array
+    element_offsets_m: np.ndarray = field(default_factory=lambda: np.zeros((1, 3)))
+    array: ArrayConfig | None = None
+    channel_gain: np.ndarray = field(default_factory=lambda: np.ones(1, dtype=np.complex128))
     # CSR index: rows overlapping chunk c are chunk_rows[chunk_ptr[c]:chunk_ptr[c + 1]]
     chunk_ptr: np.ndarray | None = None
     chunk_rows: np.ndarray | None = None
     row_start: np.ndarray | None = None
     row_end: np.ndarray | None = None
+
+    @property
+    def n_channels(self) -> int:
+        return len(self.element_offsets_m)
 
     @property
     def n_chunks(self) -> int:
@@ -123,34 +142,72 @@ def _apply_ramp(out: np.ndarray, u: np.ndarray, duration: float, rate: float) ->
 def _emission_signal(job: RecordingJob, row: int, k: np.ndarray, rate: float, chunk: int):
     """Received baseband of one emission at recording sample indices ``k`` of a ``rate`` grid.
 
-    Returns complex64 samples aligned with ``k`` (zero outside the emission).
+    Returns complex64 samples of shape (len(k), n_channels), zero outside the emission.
     """
-    out = np.zeros(len(k), dtype=np.complex64)
-    ts = float(job.t_start[row])
-    dur = float(job.duration[row])
     fe = float(job.f_center_hz[row])
-    ei = int(job.emitter_idx[row])
-    em = job.emitters[ei]
+    em = job.emitters[int(job.emitter_idx[row])]
     tau_mid = float(job.tau_mid[row])
-    off = fe - job.center_hz
 
     # Geometry on a coarse grid (sample-index axis). Delay, waveform time and carrier cycles
     # are all linear between grid points, so they are interpolated straight to the samples.
     n_grid = max(2, int(math.ceil((k[-1] - k[0]) / rate / GEOMETRY_GRID_S)) + 1)
     kg = np.linspace(float(k[0]), float(k[-1]), n_grid)
-    rel_g = kg / rate
-    tg = job.t0 + rel_g
     if em.position_km is not None:
         pos = np.broadcast_to(np.asarray(em.position_km), (n_grid, 3))
     else:
-        pos, _ = job.trajectories[em.object_id].state_at(tg - tau_mid)
-    r_m = np.linalg.norm((pos - np.asarray(job.sensor_pos_km)) * 1000.0, axis=1)
+        pos, _ = job.trajectories[em.object_id].state_at(job.t0 + kg / rate - tau_mid)
+    rel_m = (pos - np.asarray(job.sensor_pos_km)) * 1000.0  # sensor centre -> emitter
+    r_m = np.linalg.norm(rel_m, axis=1)
     tau_g = r_m / C_MPS
-    u_g = tg - tau_g - ts
-    cyc_g = off * rel_g - fe * tau_g
-    cyc_g -= np.floor(cyc_g[0])  # only the fractional part matters
     p_dbm = float(job.eirp_dbm[row]) - fspl_db(r_m, fe) + job.rx_gain_dbi
     amp_g = np.sqrt(10 ** (p_dbm / 10))
+
+    n_ch = job.n_channels
+    if n_ch == 1:
+        return _render_one(job, row, k, rate, chunk, kg, tau_g, amp_g)[:, None]
+
+    out = np.zeros((len(k), n_ch), dtype=np.complex64)
+    offsets = job.element_offsets_m
+    tau_el = np.linalg.norm(rel_m[:, None, :] - offsets[None, :, :], axis=2) / C_MPS  # (grid, N)
+    gain = np.ones(n_ch, dtype=np.float32)
+    if job.array is not None and job.array.element_pattern != "isotropic":
+        mid = rel_m[n_grid // 2] / max(r_m[n_grid // 2], 1e-9)
+        d_local = local_axes(job.array.boresight_deg) @ mid
+        gain = np.sqrt(pattern_power(job.array, d_local)).astype(np.float32)
+
+    spread = float(np.abs(tau_el - tau_g[:, None]).max())
+    if 2 * np.pi * float(job.bandwidth_hz[row]) / 2 * spread < NARROWBAND_RAD:
+        ref = _render_one(job, row, k, rate, chunk, kg, tau_g, amp_g)
+        nz = np.flatnonzero(ref)
+        if len(nz) == 0:
+            return out
+        sl = slice(int(nz[0]), int(nz[-1]) + 1)
+        ks = k[sl].astype(np.float64)
+        for i in range(n_ch):
+            # exact per-element carrier phase; fe·Δτ is small, so float64 is ample
+            dphi = -2 * np.pi * fe * np.interp(ks, kg, tau_el[:, i] - tau_g)
+            steer = np.empty(len(dphi), dtype=np.complex64)
+            steer.real = np.cos(dphi)
+            steer.imag = np.sin(dphi)
+            out[sl, i] = ref[sl] * steer * gain[i]
+    else:
+        for i in range(n_ch):
+            out[:, i] = _render_one(job, row, k, rate, chunk, kg, tau_el[:, i], amp_g) * gain[i]
+    return out
+
+
+def _render_one(job, row, k, rate, chunk, kg, tau_g, amp_g) -> np.ndarray:
+    """One channel: the emission received with delay ``tau_g`` (on grid ``kg``)."""
+    out = np.zeros(len(k), dtype=np.complex64)
+    ts = float(job.t_start[row])
+    dur = float(job.duration[row])
+    fe = float(job.f_center_hz[row])
+    em = job.emitters[int(job.emitter_idx[row])]
+    off = fe - job.center_hz
+    rel_g = kg / rate
+    u_g = job.t0 + rel_g - tau_g - ts
+    cyc_g = off * rel_g - fe * tau_g
+    cyc_g -= np.floor(cyc_g[0])  # only the fractional part matters
 
     # u increases monotonically with k: keep only samples with 0 <= u < duration
     lo = 0 if u_g[0] >= 0 else int(math.ceil(np.interp(0.0, u_g, kg) - k[0]))
@@ -196,7 +253,8 @@ def render_chunk(job: RecordingJob, chunk: int) -> dict:
     fs = job.sample_rate
     n0 = chunk * job.chunk_samples
     n1 = min(n0 + job.chunk_samples, job.n_samples)
-    buf = np.zeros(n1 - n0, dtype=np.complex64)
+    n_ch = job.n_channels
+    buf = np.zeros((n1 - n0, n_ch), dtype=np.complex64)
     start, end = job.row_start, job.row_end
 
     rows = job.chunk_rows[job.chunk_ptr[chunk] : job.chunk_ptr[chunk + 1]]
@@ -212,16 +270,20 @@ def render_chunk(job: RecordingJob, chunk: int) -> dict:
             g = DECIMATION_GUARD
             k = np.arange((a - g) * m, (b + g) * m)
             hi = _emission_signal(job, row, k, fs * m, chunk)
-            buf[a - n0 : b - n0] += resample_poly(hi, 1, m)[g : g + (b - a)].astype(np.complex64)
+            dec = resample_poly(hi, 1, m, axis=0)[g : g + (b - a)]
+            buf[a - n0 : b - n0] += dec.astype(np.complex64)
 
     rng = make_rng(job.scenario_seed, "noise", job.sensor_id, job.band_name, chunk)
     job.receiver.add_noise(buf, rng)
+    if n_ch > 1:
+        buf *= job.channel_gain.astype(np.complex64)[None, :]  # per-channel calibration error
     iq, clipped = job.receiver.digitize(buf)
 
+    width = 2 * n_ch
     data = np.memmap(
-        job.path, dtype=job.receiver.numpy_dtype, mode="r+", shape=(2 * job.n_samples,)
+        job.path, dtype=job.receiver.numpy_dtype, mode="r+", shape=(width * job.n_samples,)
     )
-    data[2 * n0 : 2 * n1] = iq
+    data[width * n0 : width * n1] = iq.reshape(-1)
     data.flush()
     del data
     return {"recording": job.name, "chunk": chunk, "rows": int(len(rows)), "clipped": clipped}

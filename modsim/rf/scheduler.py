@@ -276,6 +276,8 @@ def _csma_traffic(t0, t1, p, profile, bw, rng, chan_rng) -> Rows:
         starts.append(s)
         durs.append(d)
         t = s[-1] + d[-1] + g[-1]
+    if not starts:  # the first gap already overshoots a short window
+        return _empty_rows()
     s, d = np.concatenate(starts), np.concatenate(durs)
     keep = s + d <= t1
     s, d = s[keep], d[keep]

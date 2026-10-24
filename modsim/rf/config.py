@@ -47,7 +47,18 @@ ARRAY_KEYS = {
     "element_positions_m",
     "boresight_deg",
     "element_gain_dbi",
+    "element_pattern",
+    "pattern_exponent",
+    "back_lobe_db",
 }
+IMPAIRMENT_KEYS = {
+    "lo_offset_ppm",
+    "phase_noise",
+    "iq_imbalance",
+    "dc_offset_dbfs",
+    "channel_mismatch",
+}
+CHANNEL_MISMATCH_KEYS = {"gain_db_sigma", "phase_deg_sigma"}
 RECEIVER_KEYS = {
     "noise_figure_db",
     "sample_format",
@@ -195,7 +206,17 @@ def _parse_array(raw: dict, where: str) -> ArrayConfig:
         element_positions_m=raw.get("element_positions_m"),
         boresight_deg=float(raw.get("boresight_deg", 0.0)),
         element_gain_dbi=float(raw.get("element_gain_dbi", 0.0)),
+        element_pattern=str(raw.get("element_pattern", "isotropic")),
+        pattern_exponent=_num(raw, "pattern_exponent", where, 1.0, minimum=0, exclusive=True),
+        back_lobe_db=_num(raw, "back_lobe_db", where, -20.0),
     )
+    if arr.element_pattern not in ("isotropic", "cosine"):
+        raise ValueError(
+            f"{where}.element_pattern: "
+            f"{suggest_typo_fixes(arr.element_pattern, ['cosine', 'isotropic'])}"
+        )
+    if arr.back_lobe_db > 0:
+        raise ValueError(f"{where}.back_lobe_db must be <= 0 dB")
     if geometry == ArrayGeometry.UCA and not (arr.radius_m and arr.radius_m > 0):
         raise ValueError(f"{where}: uca arrays need radius_m > 0")
     if geometry == ArrayGeometry.ULA and not (arr.spacing_m and arr.spacing_m > 0):
@@ -234,8 +255,21 @@ def _parse_receiver(raw: dict, where: str) -> ReceiverConfig:
         headroom_db=_num(raw, "headroom_db", where, 50.0, minimum=0, exclusive=True),
         gain_mode=gain_mode,
         antenna_gain_dbi=_num(raw, "antenna_gain_dbi", where, 0.0),
-        impairments=dict(raw.get("impairments") or {}),
+        impairments=_parse_impairments(raw.get("impairments") or {}, f"{where}.impairments"),
     )
+
+
+def _parse_impairments(raw: dict, where: str) -> dict:
+    _check_keys(raw, IMPAIRMENT_KEYS, where)
+    out = dict(raw)
+    if "channel_mismatch" in raw:
+        cm = raw["channel_mismatch"] or {}
+        _check_keys(cm, CHANNEL_MISMATCH_KEYS, f"{where}.channel_mismatch")
+        out["channel_mismatch"] = {
+            k: _num(cm, k, f"{where}.channel_mismatch", 0.0, minimum=0)
+            for k in CHANNEL_MISMATCH_KEYS
+        }
+    return out
 
 
 def _parse_tuning(raw: dict, where: str) -> TuningConfig:

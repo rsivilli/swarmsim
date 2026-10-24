@@ -1,6 +1,6 @@
 # Design: RF emitter simulation and SigMF IQ generation
 
-Status: **Phases 0–2 implemented**; phases 3–5 not started. The open questions from the first draft
+Status: **Phases 0–3 implemented**; phases 4–5 not started. The open questions from the first draft
 have been resolved (§14).
 
 ## 1. Summary
@@ -479,7 +479,7 @@ framing, TDOA network sensors, a GPU backend, and a Kubernetes job runner.
 | **0: Plumbing and truth** ✅ | Models, YAML parsing and validation, profile library, controllers, silent drones, Stage A scheduler, link budget, detectability, parquet truth, `--dry-run` sizing | `modsim rf --dry-run` produces truth tables and sizing for a sample scenario; unit tests for path loss, horizon, scheduling |
 | **1: Single-channel IQ** ✅ | Fixed tuning, noise + FSPL + Doppler, `lora` + `fm` waveforms (ELRS, analog FPV), chunked multiprocess writer, SigMF writer, determinism | Measured in-band SNR matches the link budget within ±0.5 dB; Doppler tone within ±1 Hz; output byte-identical for 1 vs N workers; `sigmf` validation passes; throughput benchmark recorded |
 | **2: Remaining profiles + clutter** ✅ | `ofdm` + `fsk` waveforms (DJI, Wi-Fi, Remote ID BLE/Wi-Fi), background RF, CSMA traffic, annotation granularity modes | Spectrogram/occupancy checks per profile against reference shapes; annotations line up with energy in the spectrogram |
-| **3: Arrays and DF** | Array steering, element patterns, calibration error, spatial annotations, multichannel SigMF | A MUSIC/Bartlett estimator in the test suite recovers synthetic bearings within tolerance at high SNR |
+| **3: Arrays and DF** ✅ | Array steering, element patterns, calibration error, spatial annotations, multichannel SigMF | A MUSIC/Bartlett estimator in the test suite recovers synthetic bearings within tolerance at high SNR |
 | **4: Realism and tuning modes** | Two-ray, Rician/TDL fading, receiver impairments, AGC/ADC clipping, multi-band and scanning tuning | Fading statistics match the target K-factor; scanning recordings have correct `captures` segments; clipping is counted |
 | **5: Performance** | Template caching, coarse-grid channel, profiling, optional pyFFTW | Benchmarks published in the README next to the existing scaling table |
 
@@ -598,6 +598,51 @@ built-in emitting profile is now `protocol_like`.
   Remote ID): 0.66 MS/s with 1 worker, 1.79 MS/s with 4, byte-identical. About the same as the
   placeholders, but now real waveforms; per-burst resampling and fractional delay are the Phase 5
   targets.
+
+### Phase 3 implementation notes
+
+- **Conventions** follow the SigMF `spatial` extension v1.1.0:
+  - Local array frame: +X is boresight, +Y is to its left, +Z is up.
+  - Bearings: azimuth clockwise from boresight, elevation above the horizon.
+  - `array.boresight_deg` is the aperture azimuth east of true north.
+  - Geometry, patterns and steering vectors live in `modsim/rf/array.py`, so DF code can reuse
+    exactly the synthesizer's conventions (`steering_vector`, `direction_local`,
+    `relative_azimuth`).
+- **Geometry:** `ula` (elements along Y), `uca` (element 0 on boresight, counter-clockwise) or
+  `custom` positions, rotated into world coordinates by the boresight.
+- **Per-element delay** is computed from each element's exact world position, so near field and
+  large apertures are handled. Two rendering paths:
+  - **Narrowband:** if 2π·(B/2)·max|τᵢ − τ| < 0.01 rad, the waveform is rendered once at the
+    array centre and each element gets its exact carrier phase −2π f_e (τᵢ − τ).
+  - **Exact:** otherwise each element is rendered at its own delay. For an 8 cm UCA that applies
+    to emissions wider than about 12 MHz (Wi-Fi, the DJI downlink). Tests show the two paths agree
+    to better than −60 dB where the narrowband path applies.
+- **Element patterns:** `isotropic` (default) or `cosine` (power ∝ cos^q, `back_lobe_db` floor),
+  pointing radially on a UCA and along boresight otherwise. The link budget's SNR and
+  detectability for array sensors use the element pattern averaged over the array.
+- **Calibration error:** `receiver.impairments.channel_mismatch: {gain_db_sigma, phase_deg_sigma}`
+  draws one complex gain per channel per sensor, applied with the channel's noise before the ADC.
+  The truth is recorded as `swarmsim:channel_gain_db` / `swarmsim:channel_phase_deg`.
+- **SigMF:**
+  - Channels are interleaved per sample (`core:num_channels`).
+  - Global: `spatial:num_elements`, `spatial:channel_index` = 0.
+  - Captures: `spatial:aperture_azimuth`, `spatial:element_geometry`.
+  - Annotations: `spatial:signal_bearing` (azimuth relative to the aperture, elevation, range,
+    range_rate) and `spatial:emitter_location`.
+  - The sensor's `.sigmf-collection` also carries `spatial:element_geometry`.
+- **Verified** (tests, on synthesized IQ):
+  - Bartlett and MUSIC recover CW bearings within 0.2° at four bearings.
+  - MUSIC on the UCA recovers elevation within 1°.
+  - Wi-Fi (exact per-element path) within 1°; a moving emitter tracks truth within 0.5°.
+  - Cosine-pattern channel powers within 0.3 dB of the pattern.
+  - Measured inter-channel phases match the recorded calibration truth within 0.5°, and
+    correcting with that truth restores 0.2° accuracy.
+- **Throughput** (RF-02 in `rf_fpv_mix.yaml`: 4-element UCA, 2.4 GHz, 100 MS/s per channel,
+  about 560 background emitters): 0.91 MS/s of channel samples with 1 worker, 2.04 MS/s with 4,
+  byte-identical. Wi-Fi bursts take the per-element path, so this band costs roughly N× a
+  single-element sensor; caching the rendered reference waveform per burst is a Phase 5 target.
+- **Fix:** CSMA traffic scheduling no longer fails when a window is shorter than the first
+  inter-frame gap.
 
 ## 13. Testing strategy
 
