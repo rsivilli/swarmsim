@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 
+from modsim import __version__
 from modsim.cli import cli
 
 
@@ -21,13 +22,13 @@ class TestCLI:
         """CLI should show version."""
         result = cli_runner.invoke(cli, ["--version"])
         assert result.exit_code == 0
-        assert "0.2.0" in result.output
+        assert __version__ in result.output
 
     def test_version_command(self, cli_runner):
         """Version subcommand should show dependency info."""
         result = cli_runner.invoke(cli, ["version"])
         assert result.exit_code == 0
-        assert "modsim 0.2.0" in result.output
+        assert f"modsim {__version__}" in result.output
         assert "NumPy" in result.output
         assert "Matplotlib" in result.output
         assert "PyYAML" in result.output

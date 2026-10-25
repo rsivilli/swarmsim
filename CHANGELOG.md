@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-25
+
 ### Added
 
 - RF emitter simulation and SigMF IQ synthesis (`modsim rf`, preview): emission scheduling, link
@@ -17,6 +19,7 @@ All notable changes to this project are documented here. The format follows
   source is set.
 - CONTRIBUTING, SECURITY, Code of Conduct, issue/PR templates and Dependabot configuration.
 - CI job that lints and renders the Helm chart and builds the Locust image.
+- `CLAUDE.md` with development commands and architecture notes for Claude Code.
 
 ### Changed
 
