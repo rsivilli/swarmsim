@@ -303,3 +303,33 @@ class TestJSONLExport:
         # Total messages should equal total tracks
         total_bundle_size = sum(e["bundle_size"] for e in events)
         assert total_bundle_size == header["metadata"]["total_messages"]
+
+
+class TestHelmValues:
+    """Generated Helm values must point the chart at the timeline ConfigMap."""
+
+    _HEADER = {
+        "metadata": {"scenario": "test"},
+        "config": {"recommended_deployment": {"users": 4, "worker_replicas": 2}},
+    }
+
+    def _generate(self, tmp_path, suffix):
+        import yaml
+
+        from modsim.comm.helm_values import generate_helm_values
+
+        comms = tmp_path / f"run_comms{suffix}"
+        comms.write_text(json.dumps(self._HEADER) + "\n")
+        out = tmp_path / "values.yaml"
+        generate_helm_values(comms, out)
+        return yaml.safe_load(out.read_text())
+
+    def test_json_timeline_uses_existing_configmap(self, tmp_path):
+        values = self._generate(tmp_path, ".json")
+        assert values["timeline"]["existingConfigMap"] == "locust-timeline"
+        assert values["timeline"]["path"] == "/data/timeline.json"
+        assert values["locust"]["worker"]["replicas"] == 2
+
+    def test_jsonl_timeline_keeps_jsonl_extension(self, tmp_path):
+        values = self._generate(tmp_path, ".jsonl")
+        assert values["timeline"]["path"] == "/data/timeline.jsonl"

@@ -7,6 +7,7 @@ from pathlib import Path
 
 import click
 
+from . import __version__
 from .config import load_scenario
 from .errors import ConfigError, ModsimError, ValidationError
 from .models import SimState, TimestepSnapshot
@@ -18,7 +19,7 @@ from .viz import animate_scenario, plot_final
 
 
 @click.group()
-@click.version_option(version="0.2.0", prog_name="modsim")
+@click.version_option(version=__version__, prog_name="modsim")
 def cli():
     """modsim — 2D/3D sensor coverage modeling and simulation tool.
 
@@ -86,7 +87,7 @@ def run_cmd(
     """Run simulation from scenario YAML file.
 
     Example:
-        modsim run examples/basic_grid.yaml
+        modsim run scenarios/basic_grid.yaml
         modsim run scenario.yaml --no-viz --export results.json
         modsim run scenario.yaml --animate --verbose
         modsim run scenario.yaml --map-style satellite
@@ -296,7 +297,7 @@ def validate(scenario: str, strict: bool):
     - Numerical ranges and constraints
 
     Example:
-        modsim validate examples/basic_grid.yaml
+        modsim validate scenarios/basic_grid.yaml
         modsim validate my_scenario.yaml --strict
     """
     try:
@@ -355,54 +356,6 @@ def validate(scenario: str, strict: bool):
         sys.exit(1)
     except yaml.YAMLError as e:
         click.secho("✗ Invalid YAML:", fg="red", bold=True)
-        click.secho(f"  {e}", fg="red")
-        sys.exit(1)
-    except KeyboardInterrupt:
-        click.secho("\n✗ Interrupted by user", fg="yellow")
-        sys.exit(130)
-
-
-@cli.command()
-@click.argument("input_file", type=click.Path(exists=True))
-@click.argument("output_file", type=click.Path())
-@click.option(
-    "--format",
-    "export_format",
-    type=click.Choice(["default", "comms", "states"]),
-    required=True,
-    help="Export format",
-)
-def export(input_file: str, output_file: str, export_format: str):
-    """Export or convert simulation results between formats.
-
-    Requires a simulation result file (produced by 'modsim run --export').
-
-    Example:
-        modsim export results.json timeline.json --format comms
-        modsim export results.json states.json --format states
-    """
-    try:
-        import json
-
-        click.echo(f"Converting: {input_file} → {output_file}")
-        click.echo(f"Format: {export_format}")
-        click.echo()
-
-        # Load input
-        with open(input_file) as f:
-            json.load(f)  # Validate JSON is loadable
-
-        # This is a simplified version - in reality, you'd need to reconstruct
-        # SimState from the JSON data, which requires more complex logic
-        click.secho("✗ Export conversion not yet implemented", fg="red")
-        click.echo("  Please use --export and --export-mode with 'modsim run' instead")
-        sys.exit(1)
-
-    except FileNotFoundError:
-        click.secho(f"✗ File not found: {input_file}", fg="red")
-        sys.exit(1)
-    except json.JSONDecodeError as e:
-        click.secho("✗ Invalid JSON:", fg="red", bold=True)
         click.secho(f"  {e}", fg="red")
         sys.exit(1)
     except KeyboardInterrupt:
@@ -741,20 +694,22 @@ def version():
     Example:
         modsim version
     """
+    import importlib.metadata
+
     import numpy as np
     import matplotlib
     import yaml
 
-    click.echo("modsim 0.2.0")
+    click.echo(f"modsim {__version__}")
     click.echo()
     click.echo("Dependencies:")
     click.echo(f"  Python:      {sys.version.split()[0]}")
     click.echo(f"  NumPy:       {np.__version__}")
     click.echo(f"  Matplotlib:  {matplotlib.__version__}")
     click.echo(f"  PyYAML:      {yaml.__version__}")
-    click.echo(f"  Click:       {click.__version__}")
+    click.echo(f"  Click:       {importlib.metadata.version('click')}")
     click.echo()
-    click.echo("For more information: https://github.com/anthropics/modsim")
+    click.echo("For more information: https://github.com/rsivilli/swarmsim")
 
 
 if __name__ == "__main__":

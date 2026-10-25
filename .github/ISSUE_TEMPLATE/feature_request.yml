@@ -1,0 +1,19 @@
+name: Feature request
+description: Suggest a new capability or scenario
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What you'd like to see, e.g. a new config option, CLI flag or transport.
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered

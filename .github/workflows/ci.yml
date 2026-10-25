@@ -37,3 +37,21 @@ jobs:
       - name: Validate bundled scenarios
         run: |
           for f in scenarios/*.yaml; do uv run modsim validate "$f"; done
+
+  loadtest-stack:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+      - name: Lint Helm chart
+        run: helm lint locust/helm-chart --set timeline.existingConfigMap=locust-timeline
+      - name: Render Helm chart with each timeline source
+        run: |
+          helm template t locust/helm-chart --set timeline.existingConfigMap=locust-timeline \
+            | grep -q 'name: locust-timeline'
+          helm template t locust/helm-chart --set timeline.inline=x \
+            | grep -q 'name: t-modsim-locust-timeline'
+          helm template t locust/helm-chart --set timeline.hostPath=/data/timelines \
+            | grep -q 'path: /data/timelines'
+      - name: Build Locust image
+        run: docker build -t modsim-locust:ci locust/

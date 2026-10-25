@@ -11,7 +11,13 @@ A tool for simulating sensor detection coverage with support for:
 
 from __future__ import annotations
 
-__version__ = "0.2.0"
+import importlib.metadata as _metadata
+
+try:
+    __version__ = _metadata.version("modsim")
+except _metadata.PackageNotFoundError:  # running from a source tree without installing
+    __version__ = "0.0.0+unknown"
+
 __author__ = "Robert Sivilli"
 __license__ = "MIT"
 

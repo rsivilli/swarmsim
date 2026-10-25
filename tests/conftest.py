@@ -16,7 +16,7 @@ from modsim.models import (
 )
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-EXAMPLES_DIR = PROJECT_ROOT / "examples"
+SCENARIOS_DIR = PROJECT_ROOT / "scenarios"
 
 
 # ===========================================================================
@@ -31,15 +31,15 @@ def cli_runner():
 
 
 @pytest.fixture
-def example_scenarios():
-    """Path to example scenario directory."""
-    return EXAMPLES_DIR
+def bundled_scenarios():
+    """Path to the bundled scenario directory."""
+    return SCENARIOS_DIR
 
 
 @pytest.fixture
-def basic_scenario(example_scenarios):
+def basic_scenario(bundled_scenarios):
     """Path to basic_grid.yaml."""
-    return example_scenarios / "basic_grid.yaml"
+    return bundled_scenarios / "basic_grid.yaml"
 
 
 # ===========================================================================

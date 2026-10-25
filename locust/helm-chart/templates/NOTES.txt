@@ -1,0 +1,8 @@
+{{- if not (or .Values.timeline.hostPath .Values.timeline.existingConfigMap .Values.timeline.inline) }}
+WARNING: no timeline source is set, so Locust will fail to load {{ .Values.timeline.path }}.
+Set timeline.existingConfigMap, timeline.inline or timeline.hostPath.
+{{ end }}
+Access the Locust web UI:
+
+  kubectl port-forward svc/{{ include "modsim-locust.fullname" . }}-master {{ .Values.service.port }}:{{ .Values.service.port }}
+  open http://localhost:{{ .Values.service.port }}

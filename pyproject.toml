@@ -5,6 +5,21 @@ description = "2D/3D sensor coverage modeling and simulation tool"
 license = "MIT"
 readme = "README.md"
 requires-python = ">=3.11"
+authors = [{ name = "Robert Sivilli" }]
+keywords = ["simulation", "sensor coverage", "swarm", "drones", "load testing", "locust", "zenoh", "rf", "sigmf"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Software Development :: Testing :: Traffic Generation",
+]
 dependencies = [
     "numpy>=2.0",
     "matplotlib>=3.9",
@@ -13,6 +28,12 @@ dependencies = [
     "scipy>=1.17.0",
     "cartopy>=0.25.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/rsivilli/swarmsim"
+Repository = "https://github.com/rsivilli/swarmsim"
+Issues = "https://github.com/rsivilli/swarmsim/issues"
+Changelog = "https://github.com/rsivilli/swarmsim/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 loadtest = [
@@ -49,8 +70,10 @@ packages = ["modsim"]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
-extend-exclude = ["sample_output"]
 
 [tool.ruff.lint]
 # Explicit so newer ruff releases with broader defaults don't change CI results
 select = ["E4", "E7", "E9", "F"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
