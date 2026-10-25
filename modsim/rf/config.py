@@ -10,6 +10,7 @@ from .library import build_library, resolve_params
 from .models import (
     AnnotationGranularity,
     ArrayConfig,
+    AGCConfig,
     ArrayGeometry,
     BackgroundConfig,
     BandConfig,
@@ -17,6 +18,7 @@ from .models import (
     DetectorConfig,
     GroupRFConfig,
     LinkConfig,
+    PropagationConfig,
     ReceiverConfig,
     RFConfig,
     RFScenarioConfig,
@@ -37,7 +39,20 @@ RF_KEYS = {
     "k_factor",
     "background",
     "profiles",
+    "propagation",
 }
+PROPAGATION_KEYS = {
+    "ground_reflection",
+    "ground",
+    "shadowing_db",
+    "shadowing_decorrelation_m",
+    "fading",
+    "rician_k_db",
+    "fading_min_doppler_hz",
+    "fading_paths",
+}
+GROUND_KEYS = {"relative_permittivity", "conductivity_s_m", "polarization"}
+AGC_KEYS = {"target_dbfs", "block_samples", "step_db", "min_gain_db", "max_gain_db"}
 SENSOR_KEYS = {"id", "position", "type", "array", "receiver", "tuning", "detector"}
 ARRAY_KEYS = {
     "geometry",
@@ -59,6 +74,8 @@ IMPAIRMENT_KEYS = {
     "channel_mismatch",
 }
 CHANNEL_MISMATCH_KEYS = {"gain_db_sigma", "phase_deg_sigma"}
+PHASE_NOISE_KEYS = {"model", "linewidth_hz"}
+IQ_IMBALANCE_KEYS = {"gain_db", "phase_deg"}
 RECEIVER_KEYS = {
     "noise_figure_db",
     "sample_format",
@@ -66,6 +83,7 @@ RECEIVER_KEYS = {
     "full_scale_dbm",
     "headroom_db",
     "gain_mode",
+    "agc",
     "antenna_gain_dbi",
     "impairments",
 }
@@ -184,7 +202,62 @@ def _parse_rf_block(raw: dict, duration: float) -> RFConfig:
         k_factor=_num(raw, "k_factor", "rf", RFConfig.k_factor, minimum=0, exclusive=True),
         background=background,
         profiles=dict(raw.get("profiles") or {}),
+        propagation=_parse_propagation(raw.get("propagation") or {}),
     )
+
+
+def _parse_propagation(raw: dict) -> PropagationConfig:
+    where = "rf.propagation"
+    _check_keys(raw, PROPAGATION_KEYS, where)
+    ground = raw.get("ground") or {}
+    _check_keys(ground, GROUND_KEYS, f"{where}.ground")
+    pol = ground.get("polarization", "vertical")
+    if pol not in ("vertical", "horizontal"):
+        raise ValueError(f"{where}.ground.polarization must be 'vertical' or 'horizontal'")
+    fading = raw.get("fading", "none")
+    if fading not in ("none", "rician"):
+        raise ValueError(f"{where}.fading must be 'none' or 'rician', got {fading!r}")
+    k = raw.get("rician_k_db", [3.0, 15.0])
+    if isinstance(k, (int, float)) and not isinstance(k, bool):
+        k = [k, k]
+    if not (isinstance(k, (list, tuple)) and len(k) == 2):
+        raise ValueError(f"{where}.rician_k_db must be a number or [at 0°, at 90°] in dB")
+    paths = raw.get("fading_paths", 16)
+    if not isinstance(paths, int) or paths < 4:
+        raise ValueError(f"{where}.fading_paths must be an integer >= 4")
+    return PropagationConfig(
+        ground_reflection=bool(raw.get("ground_reflection", False)),
+        ground_permittivity=_num(ground, "relative_permittivity", where, 15.0, minimum=1),
+        ground_conductivity_s_m=_num(ground, "conductivity_s_m", where, 0.005, minimum=0),
+        polarization=pol,
+        shadowing_db=_num(raw, "shadowing_db", where, 0.0, minimum=0),
+        shadowing_decorrelation_m=_num(
+            raw, "shadowing_decorrelation_m", where, 50.0, minimum=0, exclusive=True
+        ),
+        fading=fading,
+        rician_k_db=(float(k[0]), float(k[1])),
+        fading_min_doppler_hz=_num(raw, "fading_min_doppler_hz", where, 1.0, minimum=0),
+        fading_paths=paths,
+    )
+
+
+def _parse_agc(raw: dict, where: str) -> AGCConfig:
+    _check_keys(raw, AGC_KEYS, where)
+    block = raw.get("block_samples", 4096)
+    if not isinstance(block, int) or block < 16:
+        raise ValueError(f"{where}.block_samples must be an integer >= 16")
+    agc = AGCConfig(
+        target_dbfs=_num(raw, "target_dbfs", where, -20.0),
+        block_samples=block,
+        step_db=_num(raw, "step_db", where, 1.0, minimum=0, exclusive=True),
+        min_gain_db=_num(raw, "min_gain_db", where, -40.0),
+        max_gain_db=_num(raw, "max_gain_db", where, 40.0),
+    )
+    if agc.target_dbfs >= 0:
+        raise ValueError(f"{where}.target_dbfs must be below 0 dBFS")
+    if agc.min_gain_db > agc.max_gain_db:
+        raise ValueError(f"{where}: min_gain_db exceeds max_gain_db")
+    return agc
 
 
 def _parse_array(raw: dict, where: str) -> ArrayConfig:
@@ -254,6 +327,7 @@ def _parse_receiver(raw: dict, where: str) -> ReceiverConfig:
         else _num(raw, "full_scale_dbm", where),
         headroom_db=_num(raw, "headroom_db", where, 50.0, minimum=0, exclusive=True),
         gain_mode=gain_mode,
+        agc=_parse_agc(raw.get("agc") or {}, f"{where}.agc"),
         antenna_gain_dbi=_num(raw, "antenna_gain_dbi", where, 0.0),
         impairments=_parse_impairments(raw.get("impairments") or {}, f"{where}.impairments"),
     )
@@ -269,6 +343,28 @@ def _parse_impairments(raw: dict, where: str) -> dict:
             k: _num(cm, k, f"{where}.channel_mismatch", 0.0, minimum=0)
             for k in CHANNEL_MISMATCH_KEYS
         }
+    if "lo_offset_ppm" in raw:
+        out["lo_offset_ppm"] = _num(raw, "lo_offset_ppm", where, minimum=0)
+    if "phase_noise" in raw:
+        pn = raw["phase_noise"] or {}
+        _check_keys(pn, PHASE_NOISE_KEYS, f"{where}.phase_noise")
+        if pn.get("model", "wiener") != "wiener":
+            raise ValueError(f"{where}.phase_noise.model: only 'wiener' is supported")
+        out["phase_noise"] = {
+            "model": "wiener",
+            "linewidth_hz": _num(pn, "linewidth_hz", f"{where}.phase_noise", minimum=0),
+        }
+    if "iq_imbalance" in raw:
+        iq = raw["iq_imbalance"] or {}
+        _check_keys(iq, IQ_IMBALANCE_KEYS, f"{where}.iq_imbalance")
+        out["iq_imbalance"] = {
+            "gain_db": _num(iq, "gain_db", f"{where}.iq_imbalance", 0.0),
+            "phase_deg": _num(iq, "phase_deg", f"{where}.iq_imbalance", 0.0),
+        }
+    if "dc_offset_dbfs" in raw:
+        out["dc_offset_dbfs"] = _num(raw, "dc_offset_dbfs", where)
+        if out["dc_offset_dbfs"] > 0:
+            raise ValueError(f"{where}.dc_offset_dbfs must be <= 0 dBFS")
     return out
 
 
@@ -453,5 +549,11 @@ def parse_rf(raw: dict, duration: float) -> RFScenarioConfig | None:
     ids = [s.sensor_id for s in sensors]
     if len(set(ids)) != len(ids):
         raise ValueError("rf_sensors: sensor ids must be unique")
+    for s in sensors:
+        if s.receiver.gain_mode == "agc" and rf.chunk_samples % s.receiver.agc.block_samples:
+            raise ValueError(
+                f"rf_sensors[{s.sensor_id}].receiver.agc.block_samples must divide "
+                f"rf.chunk_samples ({rf.chunk_samples})"
+            )
 
     return RFScenarioConfig(rf=rf, sensors=sensors, groups=groups, library=library)

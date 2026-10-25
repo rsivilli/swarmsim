@@ -12,9 +12,17 @@ from dataclasses import dataclass
 import numpy as np
 
 from .array import mean_pattern_gain_db
+from .channel import (
+    doppler_spread_hz,
+    link_seed,
+    rician_gain,
+    rician_k_linear,
+    shadowing_db,
+    two_ray_factor,
+)
 from .geometry import Trajectory, relative_geometry
-from .models import EmissionTable, Emitter, RFSensorConfig, TuningMode
-from .propagation import doppler_hz, fspl_db, noise_floor_dbm, radio_horizon_m
+from .models import EmissionTable, Emitter, PropagationConfig, RFSensorConfig, TuningMode
+from .propagation import C_MPS, doppler_hz, fspl_db, noise_floor_dbm, radio_horizon_m
 
 
 @dataclass
@@ -64,8 +72,25 @@ LINK_COLUMNS = (
     "rx_power_dbm",
     "noise_dbm",
     "snr_db",
+    "two_ray_db",
+    "shadow_db",
+    "fade_db",
     "detectable",
 )
+
+
+def _per_link(emitter_idx, emitters, sensor_id, scenario_seed, fn) -> np.ndarray:
+    """Evaluate ``fn(link_seed, rows)`` for each emitter's rows; returns values aligned to rows."""
+    out = np.zeros(len(emitter_idx))
+    order = np.argsort(emitter_idx, kind="stable")
+    bounds = np.flatnonzero(np.diff(emitter_idx[order])) + 1
+    for rows in np.split(order, bounds):
+        if len(rows) == 0:
+            continue
+        ei = int(emitter_idx[rows[0]])
+        emitter_id = emitters[ei].emitter_id if emitters is not None else str(ei)
+        out[rows] = fn(link_seed(scenario_seed, emitter_id, sensor_id), rows)
+    return out
 
 
 def _scan_observed(t_start, t_end, offset, dwell, cycle) -> np.ndarray:
@@ -102,8 +127,17 @@ def compute_links(
     window: tuple[float, float],
     cull_snr_db: float,
     k_factor: float,
+    emitters: list[Emitter] | None = None,
+    prop: PropagationConfig | None = None,
+    scenario_seed: int | None = None,
 ) -> dict[str, np.ndarray]:
-    """Columnar link table, keeping only rows above ``cull_snr_db`` that the sensor observes."""
+    """Columnar link table, keeping only rows above ``cull_snr_db`` that the sensor observes.
+
+    ``snr_db`` is the large-scale SNR: path loss, two-ray ground reflection and shadowing.
+    ``fade_db`` is the small-scale Rician fade at the emission's mid-time (array centre), and
+    ``detectable`` uses snr_db + fade_db.
+    """
+    prop = prop or PropagationConfig()
     out: dict[str, list[np.ndarray]] = {c: [] for c in LINK_COLUMNS}
     n = len(emissions)
     if n == 0 or not sensors:
@@ -112,6 +146,7 @@ def compute_links(
     f = emissions.f_center_hz
     bw = emissions.bandwidth_hz
     f_lo, f_hi = f - bw / 2, f + bw / 2
+    t_mid = emissions.t_start + emissions.duration / 2
     t_s = emissions.t_start
     t_e = t_s + emissions.duration
     all_idx = np.arange(n)
@@ -154,12 +189,50 @@ def compute_links(
                 rx = rx + mean_pattern_gain_db(
                     sensor.array, geo["azimuth_deg"][idx], geo["elevation_deg"][idx]
                 )
+            two_ray = np.zeros(len(idx))
+            if prop.ground_reflection:
+                factor = two_ray_factor(states.pos_km[idx], sp, f[idx], prop)
+                two_ray = 20 * np.log10(np.maximum(np.abs(factor), 1e-6))
+            shadow = np.zeros(len(idx))
+            if prop.shadowing_db > 0:
+                speed_m = np.linalg.norm(states.vel_kmps[idx], axis=1) * 1000.0
+                shadow = _per_link(
+                    emissions.emitter_idx[idx],
+                    emitters,
+                    sensor.sensor_id,
+                    scenario_seed,
+                    lambda seed, rows: shadowing_db(seed, speed_m[rows] * t_mid[idx][rows], prop),
+                )
+            rx = rx + two_ray + shadow
             noise = noise_floor_dbm(np.maximum(overlap[idx], 1.0), sensor.receiver.noise_figure_db)
             snr = rx - noise
             keep = snr >= cull_snr_db
             idx, pl, rx, noise, snr = idx[keep], pl[keep], rx[keep], noise[keep], snr[keep]
+            two_ray, shadow = two_ray[keep], shadow[keep]
             if len(idx) == 0:
                 continue
+            fade = np.zeros(len(idx))
+            if prop.fading == "rician":
+                t_rx = t_mid[idx] + geo["range_m"][idx] / C_MPS
+                speed_m = np.linalg.norm(states.vel_kmps[idx], axis=1) * 1000.0
+                f_d = doppler_spread_hz(speed_m, f[idx], prop)
+                k_lin = rician_k_linear(geo["elevation_deg"][idx], prop)
+                fade = _per_link(
+                    emissions.emitter_idx[idx],
+                    emitters,
+                    sensor.sensor_id,
+                    scenario_seed,
+                    lambda seed, rows: (
+                        20
+                        * np.log10(
+                            np.abs(
+                                rician_gain(
+                                    seed, t_rx[rows], f_d[rows], f[idx][rows], k_lin[rows], prop
+                                )[:, 0]
+                            )
+                        )
+                    ),
+                )
             vr = geo["radial_velocity_mps"][idx]
             out["emission_idx"].append(idx)
             out["sensor_idx"].append(np.full(len(idx), si))
@@ -175,7 +248,10 @@ def compute_links(
             out["rx_power_dbm"].append(rx)
             out["noise_dbm"].append(noise)
             out["snr_db"].append(snr)
-            out["detectable"].append(snr >= sensor.detector.threshold_snr_db)
+            out["two_ray_db"].append(two_ray)
+            out["shadow_db"].append(shadow)
+            out["fade_db"].append(fade)
+            out["detectable"].append(snr + fade >= sensor.detector.threshold_snr_db)
 
     dtypes = {
         "emission_idx": np.int64,

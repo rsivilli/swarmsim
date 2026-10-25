@@ -255,14 +255,19 @@ communication:
 
 swarmsim is gaining an RF layer: drones, their ground controllers and background devices act as RF
 emitters with commercial link profiles, and RF sensors record SigMF IQ. See
-[docs/design/rf-sigmf.md](docs/design/rf-sigmf.md) for the full design. **Phases 0–3** are
+[docs/design/rf-sigmf.md](docs/design/rf-sigmf.md) for the full design. **Phases 0–4** are
 available now:
 
 - Every emission is scheduled, and each sensor gets a link budget (free-space loss, radio horizon,
   SNR, detectability, Doppler, bearing).
 - Ground-truth tables and IQ storage estimates are written for every run.
-- Sensors with `fixed` or `multi` tuning get synthesized IQ as SigMF recordings, with
-  per-emission annotations.
+- Sensors get synthesized IQ as SigMF recordings, with per-emission annotations:
+  - `fixed` / `multi` tuning: one recording per band.
+  - `scanning`: one recording with a capture segment per dwell, and zero-filled retune gaps.
+- Optional channel effects: two-ray ground reflection, correlated log-normal shadowing, and
+  elevation-dependent Rician fading.
+- Optional receiver impairments: LO offset, Wiener phase noise, IQ imbalance, DC offset, array
+  calibration error, and AGC. Each one's truth is recorded in the SigMF metadata.
 - Direction-finding sensors with ULA, UCA or custom antenna arrays record phase-coherent
   multichannel IQ. That includes element patterns and optional per-channel calibration error.
   Bearing truth goes in SigMF `spatial` annotations, and `modsim.rf.array.steering_vector` matches
@@ -273,8 +278,6 @@ available now:
   - DJI OcuSync and DroneID: LTE-like OFDM with Zadoff-Chu sync.
   - Wi-Fi and Remote ID over Wi-Fi: 802.11 OFDM with the legacy preamble.
   - BLE, Remote ID over BLE and SiK: GFSK.
-
-  Scanning sensors arrive in Phase 4.
 
 ```bash
 uv sync --extra rf    # optional: pyarrow (Parquet truth) and sigmf-python
@@ -326,6 +329,31 @@ rf_sensors:
       mode: fixed                     # fixed | multi | scanning
       bands:
         - {name: ism915, center_hz: 915.0e6, sample_rate: 30.0e6}
+```
+
+Channel effects and receiver impairments are off by default:
+
+```yaml
+rf:
+  propagation:
+    ground_reflection: true             # two-ray: render the ground-reflected path
+    ground: {relative_permittivity: 15, conductivity_s_m: 0.005, polarization: vertical}
+    shadowing_db: 6                     # log-normal σ, correlated over shadowing_decorrelation_m
+    fading: rician                      # K rises with elevation: rician_k_db [at 0°, at 90°]
+    rician_k_db: [3, 15]
+
+rf_sensors:
+  - id: RF-01
+    # ...
+    receiver:
+      gain_mode: agc                    # or fixed (full scale = noise floor + headroom_db)
+      agc: {target_dbfs: -20, block_samples: 4096}
+      impairments:
+        lo_offset_ppm: 0.5              # drawn uniformly within ±ppm per sensor
+        phase_noise: {model: wiener, linewidth_hz: 50}
+        iq_imbalance: {gain_db: 0.2, phase_deg: 1.0}
+        dc_offset_dbfs: -50
+        channel_mismatch: {gain_db_sigma: 0.3, phase_deg_sigma: 5}   # arrays
 ```
 
 ## Example Scenarios
@@ -414,6 +442,7 @@ modsim/
     iq.py               Recording jobs, multiprocess synthesis
     sigmf_writer.py     .sigmf-meta annotations and .sigmf-collection
     array.py            Array geometry, element patterns, steering vectors (SigMF spatial frame)
+    channel.py          Ground reflection, shadowing, Rician fading (closed-form, per-link seeded)
 
 locust/
   locustfile.py         Timeline replay with REST, Zenoh native, and UDL transports
