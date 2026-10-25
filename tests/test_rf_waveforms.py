@@ -312,3 +312,69 @@ class TestEndToEnd:
         assert np.mean(np.abs(x[s0 : s0 + n]) ** 2) > 10 * np.mean(
             np.abs(x[s0 - 2000 : s0 - 100]) ** 2
         )
+
+
+class TestBandEdgeNative:
+    def test_single_rate_edge_path_matches_oversampled_path(self, tmp_path, monkeypatch):
+        """OFDM cut by the band edge: the single-rate bandpass path (Phase 5) must agree with
+        the oversample-and-decimate path in the band interior and leak no more beyond the cut."""
+        import modsim.rf.synth as synth
+
+        raw = scenario({"profile": "wifi_drone", "params": {"channel": "6", "power_dbm": 30}},
+                       20e6, 2.447e9)  # fmt: skip  # 2437 MHz: half of the burst is out of band
+        raw["rf"]["window"] = [0.0, 0.05]
+        raw["rf_sensors"][0]["receiver"]["noise_figure_db"] = 0
+        p = tmp_path / "s.yaml"
+        p.write_text(yaml.safe_dump(raw))
+        plan = plan_rf(load_scenario(p))
+        (new,), _ = synthesize(plan, tmp_path / "new", workers=1)
+        monkeypatch.setattr(synth, "NATIVE_RATE", set())
+        (old,), _ = synthesize(plan, tmp_path / "old", workers=1)
+        a, b = read_iq(new), read_iq(old)
+        f = np.fft.fftfreq(len(a), 1 / 20e6)
+        spec_a, spec_b = np.abs(np.fft.fft(a)) ** 2, np.abs(np.fft.fft(b)) ** 2
+        diff = np.abs(np.fft.fft(a - b)) ** 2
+        interior = (f > -8e6) & (f < -1e6)
+        assert 10 * np.log10(diff[interior].sum() / spec_b[interior].sum()) < -35
+        beyond = (f > 1e6) & (f < 9e6)  # where content past the cut would alias
+        assert spec_a[beyond].mean() <= 1.26 * spec_b[beyond].mean()
+
+
+class TestPhase5Equivalence:
+    @pytest.mark.parametrize("fs", [100e6, 30.72e6])
+    def test_native_resampling_against_exact_interpolation(self, fs):
+        """Guard on OFDM placement accuracy: compare with exact trigonometric interpolation of
+        the band-limited burst (zero-padded, so periodic extension is harmless)."""
+        native, rate = wifi_burst(0.0002, seed=4)
+        pad = np.zeros(3 * len(native), dtype=complex)
+        pad[len(native) : 2 * len(native)] = native
+        spec, m = np.fft.fft(pad), len(pad)
+        k = np.fft.fftfreq(m, 1 / m)
+        n = int(1.5e-4 * fs)
+        t = 2.5e-7 + np.arange(n) / fs
+        exact = np.exp(2j * np.pi * np.outer(t * rate + len(native), k) / m) @ spec / m
+        f = np.fft.fftfreq(n, 1 / fs)
+        band = np.abs(f) < 8.5e6  # the Wi-Fi channel
+        for got in (
+            sample_native(native, rate, 2.5e-7, n, fs),
+            sample_native(native, rate, 2.5e-7, n, fs, half_bw=10e6),  # unclipped: same path
+        ):
+            err = (np.abs(np.fft.fft(got - exact))[band] ** 2).sum()
+            assert 10 * np.log10(err / (np.abs(np.fft.fft(exact))[band] ** 2).sum()) < -45
+
+    def test_threaded_link_table_is_deterministic(self, tmp_path, monkeypatch):
+        import modsim.rf.links as links
+
+        raw = scenario({"profile": "wifi_drone", "params": {"channel": "6"}}, 40e6, 2.437e9)
+        raw["rf_sensors"] += [
+            dict(copy.deepcopy(raw["rf_sensors"][0]), id=f"S{i}", position=[1.0 + i, 4.0, 0.01])
+            for i in range(5)
+        ]
+        p = tmp_path / "s.yaml"
+        p.write_text(yaml.safe_dump(raw))
+        cfg = load_scenario(p)
+        many = plan_rf(cfg).links
+        monkeypatch.setattr(links.os, "cpu_count", lambda: 1)
+        one = plan_rf(cfg).links
+        for col in many:
+            np.testing.assert_array_equal(many[col], one[col])

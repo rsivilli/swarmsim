@@ -50,7 +50,7 @@ from .receiver import (
     phase_noise_bridge,
 )
 from .scheduler import make_rng
-from .waveforms import render
+from .waveforms import NATIVE_RATE, render
 
 GEOMETRY_GRID_S = 1e-3
 RAMP_S = 2e-6
@@ -169,12 +169,13 @@ class RecordingJob:
         self.chunk_ptr = np.concatenate([[0], np.cumsum(counts)]).astype(np.int64)
 
 
-def _apply_ramp(out: np.ndarray, u: np.ndarray, duration: float, rate: float) -> None:
+def _apply_ramp(out, ks, kg, u_g, duration: float, rate: float) -> None:
     """Raised-cosine on/off ramp, applied in place to the samples near either end."""
     ramp = min(RAMP_S, duration / 10)
-    n = min(int(math.ceil(ramp * rate)) + 1, len(u))
-    for sl in (slice(0, n), slice(len(u) - n, len(u))):
-        x = np.clip(np.minimum(u[sl], duration - u[sl]) / ramp, 0.0, 1.0)
+    n = min(int(math.ceil(ramp * rate)) + 1, len(ks))
+    for sl in (slice(0, n), slice(len(ks) - n, len(ks))):
+        u = np.interp(ks[sl], kg, u_g)
+        x = np.clip(np.minimum(u, duration - u) / ramp, 0.0, 1.0)
         out[sl] *= (0.5 - 0.5 * np.cos(np.pi * x)).astype(np.float32)
 
 
@@ -328,7 +329,12 @@ def _render_one(job, row, k, rate, chunk, center_hz, kg, tau_g, amp_g, extra=Non
         return out
     sl = slice(lo, hi)
     ks = k[sl].astype(np.float64)
-    u = np.interp(ks, kg, u_g)
+    # Phase-type waveforms need the emission time at every sample; native-rate and noise
+    # waveforms only need where they start (they are sampled on a uniform grid)
+    if em.waveform in NATIVE_RATE or em.waveform == "noise":
+        u = np.interp(ks[:1], kg, u_g)
+    else:
+        u = np.interp(ks, kg, u_g)
     cycles = np.interp(ks, kg, cyc_g)
     amp = np.interp(ks, kg, amp_g).astype(np.float32)
 
@@ -336,12 +342,14 @@ def _render_one(job, row, k, rate, chunk, center_hz, kg, tau_g, amp_g, extra=Non
     kind, s = render(
         em.waveform,
         u,
+        n_samples=len(ks),
         bandwidth_hz=float(job.bandwidth_hz[row]),
         duration=dur,
         seed=seed,
         params=em.params,
         sample_rate=rate,
         noise_key=(int(job.emission_idx[row]), chunk),
+        shift_hz=off,
     )
     phi0 = np.random.default_rng([seed, 0x9A5E]).uniform(0, 2 * np.pi)
     if kind == "phase":
@@ -355,7 +363,7 @@ def _render_one(job, row, k, rate, chunk, center_hz, kg, tau_g, amp_g, extra=Non
         carrier.real = np.cos(phase)
         carrier.imag = np.sin(phase)
         out[sl] = amp * carrier * s.astype(np.complex64)
-    _apply_ramp(out[sl], u, dur, rate)
+    _apply_ramp(out[sl], ks, kg, u_g, dur, rate)
     return out
 
 
@@ -382,7 +390,8 @@ def render_chunk(job: RecordingJob, chunk: int) -> dict:
             if b <= a:
                 continue
             reach = abs(job.f_center_hz[row] - center) + job.bandwidth_hz[row] / 2
-            if reach <= ALIAS_LIMIT * fs:
+            native = job.emitters[int(job.emitter_idx[row])].waveform in NATIVE_RATE
+            if native or reach <= ALIAS_LIMIT * fs:
                 buf[a - n0 : b - n0] += _emission_signal(
                     job, row, np.arange(a, b), fs, chunk, center
                 )

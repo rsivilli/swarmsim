@@ -30,6 +30,7 @@ from .native import sample_native
 from .ofdm import ofdm_burst
 
 PROTOCOL_LIKE = {"lora", "fm", "cw", "ofdm", "fsk"}
+NATIVE_RATE = {"ofdm"}  # resampled onto the sensor grid; band-limits itself at band edges
 
 # Waveform parameters accepted in a profile's ``waveform_params``
 WAVEFORM_PARAMS: dict[str, set[str]] = {
@@ -73,8 +74,17 @@ def render(
     params: dict,
     sample_rate: float,
     noise_key: tuple,
+    shift_hz: float = 0.0,
+    n_samples: int | None = None,
 ) -> tuple[str, np.ndarray]:
-    """Waveform at times ``u`` (seconds since emission start, spaced 1/sample_rate)."""
+    """Waveform at times ``u`` (seconds since emission start, spaced 1/sample_rate).
+
+    For ``ofdm`` and ``noise`` only the first time and the sample count matter, so callers may
+    pass just ``u[:1]`` with ``n_samples``.
+
+    ``shift_hz`` is the offset the caller applies afterwards; native-rate (``ofdm``) waveforms
+    use it to band-limit to what will land inside the recording (see ``native.sample_native``).
+    """
     wp = params.get("waveform") or {}
     if waveform == "cw":
         return "phase", np.zeros(len(u))
@@ -93,8 +103,13 @@ def render(
         return "phase", gfsk_phase(u, duration, seed, wp)
     if waveform == "ofdm":
         native, rate = _ofdm(duration, seed, bandwidth_hz, wp)
-        return "iq", sample_native(native, rate, float(u[0]), len(u), sample_rate)
-    return "iq", bandlimited_noise(len(u), bandwidth_hz, sample_rate, seed, noise_key)
+        n = len(u) if n_samples is None else n_samples
+        return "iq", sample_native(
+            native, rate, float(u[0]), n, sample_rate, half_bw=bandwidth_hz / 2,
+            shift_hz=shift_hz,
+        )  # fmt: skip
+    n = len(u) if n_samples is None else n_samples
+    return "iq", bandlimited_noise(n, bandwidth_hz, sample_rate, seed, noise_key)
 
 
 def bandlimited_noise(

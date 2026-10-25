@@ -64,14 +64,18 @@ def relative_geometry(
     Azimuth is degrees clockwise from North (+y), matching modsim's heading convention.
     Radial velocity is positive when the emitter moves away from the sensor.
     """
-    rel_m = (emitter_pos_km - sensor_pos_km[None, :]) * 1000.0
-    vel_mps = emitter_vel_kmps * 1000.0
-    range_m = np.linalg.norm(rel_m, axis=1)
-    ground_m = np.hypot(rel_m[:, 0], rel_m[:, 1])
+    # 1-D component arrays: much cheaper than (N, 3) temporaries for millions of rows
+    dx = (emitter_pos_km[:, 0] - sensor_pos_km[0]) * 1000.0
+    dy = (emitter_pos_km[:, 1] - sensor_pos_km[1]) * 1000.0
+    dz = (emitter_pos_km[:, 2] - sensor_pos_km[2]) * 1000.0
+    ground_m = np.hypot(dx, dy)
+    range_m = np.hypot(ground_m, dz)
     safe = np.maximum(range_m, 1e-9)
-    radial = np.einsum("ij,ij->i", rel_m, vel_mps) / safe
-    azimuth = np.degrees(np.arctan2(rel_m[:, 0], rel_m[:, 1])) % 360.0
-    elevation = np.degrees(np.arctan2(rel_m[:, 2], np.maximum(ground_m, 1e-9)))
+    radial = (
+        dx * emitter_vel_kmps[:, 0] + dy * emitter_vel_kmps[:, 1] + dz * emitter_vel_kmps[:, 2]
+    ) * (1000.0 / safe)
+    azimuth = np.degrees(np.arctan2(dx, dy)) % 360.0
+    elevation = np.degrees(np.arctan2(dz, np.maximum(ground_m, 1e-9)))
     return {
         "range_m": range_m,
         "ground_range_m": ground_m,
