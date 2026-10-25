@@ -284,6 +284,7 @@ uv sync --extra rf    # optional: pyarrow (Parquet truth) and sigmf-python
 uv run modsim rf scenarios/rf_fpv_mix.yaml --dry-run                          # truth + sizing only
 uv run modsim rf scenarios/rf_fpv_mix.yaml --window 0:2 --sensors RF-01,RF-04 # synthesize IQ
 uv run python benchmarks/rf_bench.py                                           # throughput
+uv run python examples/rf_plot_recordings.py output/rf/rf_fpv_mix              # plots (below)
 # output/rf/rf_fpv_mix/
 #   manifest.json        sizing, counts, seeds, timings, synthesis results
 #   truth/emitters.*     every drone, controller and background emitter
@@ -292,6 +293,12 @@ uv run python benchmarks/rf_bench.py                                           #
 #   RF-01/RF-01_ism915.sigmf-{data,meta}   IQ + annotations (signal:detail, signal:emitter, truth)
 #   RF-01/RF-01.sigmf-collection
 ```
+
+`examples/rf_plot_recordings.py` plots a run from its output files alone. It draws a spectrogram
+of every recording with the truth emissions boxed, plus zoomed panels (`--zoom
+RF-04_ism2g4:200:8`, in ms from the window start). For each multichannel recording it runs MUSIC
+on the array IQ and compares the bearings with the `spatial:signal_bearing` truth. PNGs go to
+`<run>/plots/`.
 
 IQ is large: a single 100 MS/s ci16 channel writes 400 MB/s. The CLI checks the estimate against
 free disk space (override with `--force`). Use `--window` and `--sensors` to synthesize a subset,
