@@ -8,6 +8,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- RF emitter simulation and SigMF IQ synthesis (`modsim rf`, preview): emission scheduling, link
+  budgets, truth tables, protocol-like waveforms, channel effects, receiver impairments and
+  direction-finding arrays. See `docs/design/rf-sigmf.md`.
 - Helm chart: `timeline.existingConfigMap` to mount a timeline ConfigMap you created yourself.
   `modsim helm-values` output now uses it.
 - Helm chart: post-install notes with the port-forward command, plus a warning when no timeline
@@ -30,7 +33,8 @@ All notable changes to this project are documented here. The format follows
 
 - The unimplemented `modsim export` command (use `modsim run --export --export-mode ...`).
 - Deprecated `main.py` entry point (use `modsim run`).
-- `examples/` (duplicates of `scenarios/`), `sample_output/`, and the ad-hoc top-level test scripts.
+- The scenario YAMLs in `examples/` (duplicates of `scenarios/`), `sample_output/`, and the ad-hoc
+  top-level test scripts.
 
 ## [0.2.0] - 2026-10-20
 

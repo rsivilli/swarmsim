@@ -402,6 +402,7 @@ rf_sensors:
 | `tokyo_olympics.yaml` | 1,824 | Drone light show morphing over a stadium |
 | `guinness_10k.yaml` | 10,000 | Record-scale light show over a hex grid |
 | `ddp_50k_short.yaml` | 50,000 | Shorter run of `ddp_50k.yaml` for quicker iteration |
+| `rf_fpv_mix.yaml` | 14 | RF emitters and sensors for `modsim rf` (see [RF Emitters and SigMF](#rf-emitters-and-sigmf-preview)) |
 
 ### Scaling Reference
 

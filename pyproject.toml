@@ -6,7 +6,7 @@ license = "MIT"
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [{ name = "Robert Sivilli" }]
-keywords = ["simulation", "sensor coverage", "swarm", "drones", "load testing", "locust", "zenoh"]
+keywords = ["simulation", "sensor coverage", "swarm", "drones", "load testing", "locust", "zenoh", "rf", "sigmf"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",
