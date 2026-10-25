@@ -1,0 +1,24 @@
+id: elrs_2g4
+description: ExpressLRS 2.4 GHz (ISM2G4 domain) LoRa control link with TDD telemetry
+waveform: lora
+bandwidth_hz: 812500
+power_dbm: 20
+antenna_gain_dbi: 2
+roles: [drone, controller]
+channels_mhz: {start: 2400.4, step: 1.0, count: 80}
+activity:
+  - model: periodic_hopping
+    params:
+      packet_rate_hz: 500
+      hop_interval_packets: 4
+      tlm_ratio: 16
+      slot_owner: all
+      lora: {sf: 5, bw_hz: 812500, payload_bytes: 8, preamble: 12, cr: 3, implicit_header: true, crc: false}
+role_params:
+  drone: {slot_owner: telemetry}
+  controller: {slot_owner: uplink, power_dbm: 24}
+signal: {type: digital, standard: ExpressLRS, spreading: css, duplexing: tdd}
+calibration: provisional
+sources:
+  - ExpressLRS firmware source (ISM2G4 domain, packet rates), github.com/ExpressLRS/ExpressLRS
+  - Semtech SX1280 datasheet (LoRa time-on-air; SX127x formula used as an approximation)

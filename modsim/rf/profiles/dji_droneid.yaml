@@ -1,0 +1,20 @@
+id: dji_droneid
+description: DJI DroneID broadcast (short OFDM bursts carrying drone and pilot position)
+waveform: ofdm
+bandwidth_hz: 10000000
+power_dbm: 23
+antenna_gain_dbi: 3
+roles: [drone]
+channels_mhz: [2414.5, 2429.5, 2444.5, 2459.5, 2474.5, 5741.5, 5756.5, 5771.5, 5786.5, 5801.5, 5816.5, 5831.5]
+activity:
+  - model: beacon
+    params:
+      interval_s: 0.6
+      burst_s: 0.00064
+      jitter_s: 0.005
+      sequence: random_one
+waveform_params: {standard: droneid}
+signal: {type: digital, standard: DJI DroneID, mod_class: psk, carrier_variant: multi_carrier, multiplexing: ofdm}
+calibration: provisional
+sources:
+  - "Schiller et al., 'Drone Security and the Mysterious Case of DJI's DroneID', NDSS 2023 (burst structure, ~10 MHz OFDM, ~600 ms interval)"

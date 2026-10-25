@@ -1,0 +1,24 @@
+id: crossfire
+description: TBS Crossfire 915 MHz long-range control link (50 Hz LoRa mode)
+waveform: lora
+bandwidth_hz: 500000
+power_dbm: 25
+antenna_gain_dbi: 2
+roles: [drone, controller]
+channels_mhz: {start: 903.0, step: 0.45, count: 50}
+activity:
+  - model: periodic_hopping
+    params:
+      packet_rate_hz: 50
+      hop_interval_packets: 1
+      tlm_ratio: 4
+      slot_owner: all
+      airtime_s: 0.008
+role_params:
+  drone: {slot_owner: telemetry, power_dbm: 20}
+  controller: {slot_owner: uplink, power_dbm: 30}
+signal: {type: digital, standard: TBS Crossfire, spreading: css, duplexing: tdd}
+calibration: provisional
+sources:
+  - TBS Crossfire product documentation (power levels, 50/150 Hz modes)
+  - FCC ID test reports for Crossfire TX modules (occupied bandwidth, channel plan); channel plan approximated

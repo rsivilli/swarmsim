@@ -20,6 +20,7 @@ uv sync
 # Optional extras
 uv sync --extra loadtest   # Locust, Zenoh, and the Zenoh monitor
 uv sync --extra udl        # Unified Data Library (UDL) transport for Locust
+uv sync --extra rf         # pyarrow + sigmf for RF truth tables and SigMF validation (modsim rf)
 ```
 
 ## Quickstart
@@ -159,6 +160,10 @@ modsim run <scenario.yaml> [OPTIONS]
 modsim validate <scenario.yaml> [--strict]
   # Check YAML syntax and configuration without running
 
+modsim rf <scenario.yaml> [--dry-run] [--out DIR] [--window START:END] [--sensors ID,...]
+                  [--workers N] [--force] [--truth-format auto|parquet|csv]
+  # RF emission schedule, link budgets, truth tables, IQ sizing and SigMF IQ synthesis
+
 modsim helm-values <comms_export.json> [-o output.yaml]
   # Generate Helm values from an existing comms export
 
@@ -253,6 +258,119 @@ communication:
 - `exponential`: Pd = exp(-k * d)
 - `sigmoid`: Pd = 1/(1 + exp(k * (d - half_range)))
 
+## RF Emitters and SigMF (preview)
+
+swarmsim is gaining an RF layer: drones, their ground controllers and background devices act as RF
+emitters with commercial link profiles, and RF sensors record SigMF IQ. See
+[docs/design/rf-sigmf.md](docs/design/rf-sigmf.md) for the full design. **Phases 0–4** are
+available now:
+
+- Every emission is scheduled, and each sensor gets a link budget (free-space loss, radio horizon,
+  SNR, detectability, Doppler, bearing).
+- Ground-truth tables and IQ storage estimates are written for every run.
+- Sensors get synthesized IQ as SigMF recordings, with per-emission annotations:
+  - `fixed` / `multi` tuning: one recording per band.
+  - `scanning`: one recording with a capture segment per dwell, and zero-filled retune gaps.
+- Optional channel effects: two-ray ground reflection, correlated log-normal shadowing, and
+  elevation-dependent Rician fading.
+- Optional receiver impairments: LO offset, Wiener phase noise, IQ imbalance, DC offset, array
+  calibration error, and AGC. Each one's truth is recorded in the SigMF metadata.
+- Direction-finding sensors with ULA, UCA or custom antenna arrays record phase-coherent
+  multichannel IQ. That includes element patterns and optional per-channel calibration error.
+  Bearing truth goes in SigMF `spatial` annotations, and `modsim.rf.array.steering_vector` matches
+  the synthesizer's convention for DF algorithms.
+- All built-in links use protocol-like waveforms:
+  - ExpressLRS/Crossfire: LoRa chirps.
+  - Analog FPV: FM video.
+  - DJI OcuSync and DroneID: LTE-like OFDM with Zadoff-Chu sync.
+  - Wi-Fi and Remote ID over Wi-Fi: 802.11 OFDM with the legacy preamble.
+  - BLE, Remote ID over BLE and SiK: GFSK.
+
+```bash
+uv sync --extra rf    # optional: pyarrow (Parquet truth) and sigmf-python
+uv run modsim rf scenarios/rf_fpv_mix.yaml --dry-run                          # truth + sizing only
+uv run modsim rf scenarios/rf_fpv_mix.yaml --window 0:2 --sensors RF-01,RF-04 # synthesize IQ
+uv run python benchmarks/rf_bench.py                                           # throughput
+uv run python examples/rf_plot_recordings.py output/rf/rf_fpv_mix              # plots (below)
+# output/rf/rf_fpv_mix/
+#   manifest.json        sizing, counts, seeds, timings, synthesis results
+#   truth/emitters.*     every drone, controller and background emitter
+#   truth/emissions.*    every burst / hop / continuous transmission (time, frequency, EIRP, position)
+#   truth/links.*        per (emission, sensor, band): range, bearing, Doppler, SNR, detectable
+#   RF-01/RF-01_ism915.sigmf-{data,meta}   IQ + annotations (signal:detail, signal:emitter, truth)
+#   RF-01/RF-01.sigmf-collection
+```
+
+`examples/rf_plot_recordings.py` plots a run from its output files alone. It draws a spectrogram
+of every recording with the truth emissions boxed, plus zoomed panels (`--zoom
+RF-04_ism2g4:200:8`, in ms from the window start). For each multichannel recording it runs MUSIC
+on the array IQ and compares the bearings with the `spatial:signal_bearing` truth. PNGs go to
+`<run>/plots/`.
+
+IQ is large: a single 100 MS/s ci16 channel writes 400 MB/s. The CLI checks the estimate against
+free disk space (override with `--force`). Use `--window` and `--sensors` to synthesize a subset,
+and `--workers N` to parallelize. Output is byte-identical for any worker count.
+
+Built-in link profiles live in `modsim/rf/profiles/` (DJI OcuSync downlink/uplink and DroneID,
+ExpressLRS 900 MHz / 2.4 GHz, Crossfire, analog FPV, Wi-Fi drones, Remote ID over BLE and Wi-Fi, an
+intermittent SiK telemetry radio, `silent`, plus background Wi-Fi APs and BLE devices). Their
+parameters come from public sources and are provisional. Attach them to groups and declare RF sensors
+in the scenario:
+
+```yaml
+groups:
+  - group_id: fpv
+    # ... motion fields ...
+    rf:
+      links:
+        - profile: elrs_900
+        - {profile: analog_fpv, params: {channel: R5}}
+      controller:
+        placement: per_group          # per_drone | per_group | {count: N} operator sites
+        offset_from_spawn: [-0.8, -0.5]
+        links: [elrs_900]
+
+rf:
+  epoch: "2026-01-01T00:00:00Z"
+  background:
+    - {profile: wifi_ap, density_per_km2: 1.0}
+
+rf_sensors:
+  - id: RF-01
+    position: [4.0, 4.0, 0.010]       # km
+    type: detect                      # detect | df (df needs an array)
+    receiver: {noise_figure_db: 6, sample_format: ci16_le}
+    tuning:
+      mode: fixed                     # fixed | multi | scanning
+      bands:
+        - {name: ism915, center_hz: 915.0e6, sample_rate: 30.0e6}
+```
+
+Channel effects and receiver impairments are off by default:
+
+```yaml
+rf:
+  propagation:
+    ground_reflection: true             # two-ray: render the ground-reflected path
+    ground: {relative_permittivity: 15, conductivity_s_m: 0.005, polarization: vertical}
+    shadowing_db: 6                     # log-normal σ, correlated over shadowing_decorrelation_m
+    fading: rician                      # K rises with elevation: rician_k_db [at 0°, at 90°]
+    rician_k_db: [3, 15]
+
+rf_sensors:
+  - id: RF-01
+    # ...
+    receiver:
+      gain_mode: agc                    # or fixed (full scale = noise floor + headroom_db)
+      agc: {target_dbfs: -20, block_samples: 4096}
+      impairments:
+        lo_offset_ppm: 0.5              # drawn uniformly within ±ppm per sensor
+        phase_noise: {model: wiener, linewidth_hz: 50}
+        iq_imbalance: {gain_db: 0.2, phase_deg: 1.0}
+        dc_offset_dbfs: -50
+        channel_mismatch: {gain_db_sigma: 0.3, phase_deg_sigma: 5}   # arrays
+```
+
 ## Example Scenarios
 
 ### Real-World Inspired
@@ -294,6 +412,25 @@ Benchmarked on Apple Silicon. Scaling is roughly linear in `objects * sensors * 
 | 1,000 | 50 | 300 | ~0.8s |
 | 10,000 | 100 | 300 | ~17s |
 | 50,000 | 100 | 100 | ~32s |
+
+### RF Synthesis Benchmarks
+
+Run with `uv run python benchmarks/rf_bench.py` (workloads drawn from `scenarios/rf_fpv_mix.yaml`).
+Throughput is complex samples per second summed over channels, measured on a 4-core Linux
+container. Cost scales with the samples of every emission a sensor hears, so dense bands are
+slower than sparse ones.
+
+| Workload | Recording | 1 worker | 4 workers |
+|----------|-----------|----------|-----------|
+| `elrs_915` | 915 MHz, 30 MS/s; 12 ELRS radios | 3.6 MS/s | 8.7 MS/s |
+| `fpv_5g8` | 5.8 GHz, 40 MS/s; 6 continuous analog FPV + DJI downlink | 1.0 MS/s | 3.1 MS/s |
+| `busy_2g4` | 2.4 GHz, 100 MS/s; ~560 Wi-Fi/BLE devices + DJI + Remote ID | 0.9 MS/s | 3.3 MS/s |
+| `df_2g4` | 2.4 GHz, 4-element UCA, 100 MS/s per channel | 1.0 MS/s | 3.2 MS/s |
+| `scan_3band` | 3-band scanner, 100 MS/s | 1.4 MS/s | 4.1 MS/s |
+
+Planning (emission schedule, link budget, truth tables) for 1,000 ELRS+FPV drones (2,000 radios)
+against 10 sensors over 30 s takes about 28 s for 4.5 M emissions and 45 M link rows, plus about
+13 s to write the Parquet truth tables. Output is byte-identical for any `--workers` count.
 
 ## Comms Export Format
 
@@ -351,6 +488,19 @@ modsim/
     track_messages.py   Track.json message generation
     export.py           Locust timeline generation (JSON + JSONL)
     helm_values.py      Helm values YAML generation
+  rf/
+    profiles/           Commercial link profile library (YAML)
+    config.py           rf / rf_sensors / groups[].rf parsing and validation
+    scheduler.py        Emitters (drones, controllers, background) and emission scheduling
+    links.py            Per-sensor link budget, detectability, scanning coverage
+    runner.py           modsim rf pipeline, truth tables and manifest
+    waveforms/          LoRa, FM video, OFDM (Wi-Fi/LTE/DroneID), GFSK, CW, native-rate resampling
+    synth.py            Chunk renderer (delay, Doppler, path loss, anti-alias)
+    receiver.py         Thermal noise, full scale, ADC quantization and clipping
+    iq.py               Recording jobs, multiprocess synthesis
+    sigmf_writer.py     .sigmf-meta annotations and .sigmf-collection
+    array.py            Array geometry, element patterns, steering vectors (SigMF spatial frame)
+    channel.py          Ground reflection, shadowing, Rician fading (closed-form, per-link seeded)
 
 locust/
   locustfile.py         Timeline replay with REST, Zenoh native, and UDL transports

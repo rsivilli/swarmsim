@@ -1,0 +1,22 @@
+id: ble_device
+description: Background Bluetooth LE device advertising on channels 37/38/39
+waveform: fsk
+bandwidth_hz: 2000000
+power_dbm: 0
+antenna_gain_dbi: 0
+roles: [background]
+channels_mhz: [2402, 2426, 2480]
+channel_names: ["37", "38", "39"]
+activity:
+  - model: beacon
+    params:
+      interval_s: 0.5
+      burst_s: 0.000376
+      jitter_s: 0.010
+      sequence: all
+      channel_gap_s: 0.0005
+waveform_params: {bit_rate: 1000000, h: 0.5, bt: 0.5, preamble: "aa", sync: "8e89bed6"}
+signal: {type: digital, standard: Bluetooth LE, mod_class: fsk, class_variant: GFSK}
+calibration: provisional
+sources:
+  - Bluetooth Core Specification (advertising channels and timing)

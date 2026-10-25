@@ -2,6 +2,10 @@ from __future__ import annotations
 
 import enum
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .rf.models import RFScenarioConfig
 
 
 class GroupMode(enum.Enum):
@@ -132,6 +136,7 @@ class ScenarioConfig:
     seed: int | None = None
     communication: CommunicationConfig | None = None
     reference_origin: tuple[float, float] | None = None  # (lat, lon) for geographic projection
+    rf: RFScenarioConfig | None = None  # RF emitters / sensors (modsim rf)
 
 
 @dataclass
