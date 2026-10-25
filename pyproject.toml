@@ -37,9 +37,9 @@ Changelog = "https://github.com/rsivilli/swarmsim/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 loadtest = [
-    "locust>=2.32",
+    "locust>=2.47.0",
     "eclipse-zenoh>=1.0",
-    "pydantic-settings>=2.12",
+    "pydantic-settings>=2.16.1",
 ]
 udl = [
     "udl-sdk>=0.1.0a34",
@@ -53,7 +53,7 @@ rf = [
 dev = [
     "pyarrow>=17",
     "pytest>=8.0",
-    "ruff>=0.15",
+    "ruff>=0.17.2",
     "sigmf>=1.2",
 ]
 
