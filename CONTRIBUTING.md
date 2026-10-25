@@ -13,6 +13,10 @@ cd swarmsim
 uv sync
 ```
 
+`uv sync` includes the dev group, which already pulls in `pyarrow` and `sigmf`, so the RF tests
+that check Parquet truth tables and SigMF validity run without extra steps. End users get those
+packages with `uv sync --extra rf` (or `pip install modsim[rf]`).
+
 ## Before Opening a Pull Request
 
 Run the same checks CI runs:

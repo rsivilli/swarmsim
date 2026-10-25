@@ -472,7 +472,7 @@ For large simulations (>50k objects), use the JSONL streaming format by specifyi
 
 ```
 modsim/
-  cli.py          Click CLI (run, validate, helm-values, animate-all, version)
+  cli.py          Click CLI (run, validate, rf, helm-values, animate-all, version)
   config.py       YAML loading
   validators.py   Scenario structure validation
   errors.py       Exception types
@@ -510,6 +510,11 @@ locust/
   helm-chart/           Kubernetes deployment manifests
 
 k8s/zenoh.yaml          Zenoh router deployment for local clusters
+
+scenarios/              Bundled scenario YAMLs
+examples/               Standalone scripts (rf_plot_recordings.py: plot an RF run against truth)
+benchmarks/             RF synthesis throughput benchmark (rf_bench.py)
+docs/design/            Design notes (rf-sigmf.md)
 ```
 
 Simulation loop order per timestep: **detect → record stats → step motion → remove out-of-bounds → repeat**.
