@@ -1,6 +1,6 @@
 [project]
 name = "modsim"
-version = "0.2.0"
+version = "0.3.0"
 description = "2D/3D sensor coverage modeling and simulation tool"
 license = "MIT"
 readme = "README.md"
