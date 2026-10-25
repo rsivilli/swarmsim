@@ -1,6 +1,6 @@
 # Design: RF emitter simulation and SigMF IQ generation
 
-Status: **Phases 0–4 implemented**; phase 5 (performance) not started. The open questions from the first draft
+Status: **Phases 0–5 implemented.** The open questions from the first draft
 have been resolved (§14).
 
 ## 1. Summary
@@ -481,7 +481,7 @@ framing, TDOA network sensors, a GPU backend, and a Kubernetes job runner.
 | **2: Remaining profiles + clutter** ✅ | `ofdm` + `fsk` waveforms (DJI, Wi-Fi, Remote ID BLE/Wi-Fi), background RF, CSMA traffic, annotation granularity modes | Spectrogram/occupancy checks per profile against reference shapes; annotations line up with energy in the spectrogram |
 | **3: Arrays and DF** ✅ | Array steering, element patterns, calibration error, spatial annotations, multichannel SigMF | A MUSIC/Bartlett estimator in the test suite recovers synthetic bearings within tolerance at high SNR |
 | **4: Realism and tuning modes** ✅ | Two-ray, Rician/TDL fading, receiver impairments, AGC/ADC clipping, multi-band and scanning tuning | Fading statistics match the target K-factor; scanning recordings have correct `captures` segments; clipping is counted |
-| **5: Performance** | Template caching, coarse-grid channel, profiling, optional pyFFTW | Benchmarks published in the README next to the existing scaling table |
+| **5: Performance** ✅ | Template caching, coarse-grid channel, profiling, optional pyFFTW | Benchmarks published in the README next to the existing scaling table |
 
 ### Phase 0 implementation notes
 
@@ -696,6 +696,56 @@ scenarios without `rf.propagation` or `impairments` produce the same recordings 
   - The CLI no longer skips any sensor type.
 - **Sample scenario** (`rf_fpv_mix.yaml`) RF-03 (three-band scanner, 100 MS/s): 3.05 MS/s with 4
   workers on a 0.3 s window; the recording validates with `sigmf-python`.
+
+### Phase 5 implementation notes
+
+Profiling-driven, using `benchmarks/rf_bench.py` (five workloads from `rf_fpv_mix.yaml`). Every
+change is guarded by the existing accuracy tests plus new equivalence tests; physics is unchanged.
+
+| Workload | Before (1 → 4 workers) | After (1 → 4 workers) |
+|---|---|---|
+| `elrs_915` (30 MS/s) | 2.70 → 5.78 MS/s | 3.61 → 8.69 MS/s |
+| `fpv_5g8` (40 MS/s) | 0.60 → 1.52 | 0.99 → 3.06 |
+| `busy_2g4` (100 MS/s) | 0.81 → 1.87 | 0.93 → 3.28 |
+| `df_2g4` (4 × 100 MS/s) | 0.86 → 1.95 | 0.97 → 3.23 |
+| `scan_3band` (100 MS/s) | 1.13 → 2.68 | 1.40 → 4.09 |
+| Planning, 1,000 drones × 10 sensors | 67.6 s | 27.5 s |
+
+- **Smaller chunks:** the `rf.chunk_samples` default moved from 2²² to 2²⁰. This balances load
+  across workers for short windows and improves cache locality, and is the largest 4-worker gain.
+  It changes the default noise realization (noise is seeded per chunk).
+- **Band-edge OFDM in one step:** native-rate bursts that the sensor's band edge cuts through are
+  no longer rendered at m× the sample rate and decimated. Mixing commutes with aliasing modulo
+  the sample rate, so the rate converter instead uses a complex bandpass that keeps exactly the
+  part landing in band after the frequency shift. Its transition lies inside the band on the cut
+  side (as a receiver's anti-alias filter does), so nothing beyond the cut aliases back in. Tests:
+  matches the oversampled path to < −35 dB in the band interior, with no extra leakage beyond
+  the cut.
+- **Less per-sample work:** native-rate and noise waveforms skip per-sample emission-time
+  interpolation, and the on/off ramp interpolates only edge samples.
+- **Planning:**
+  - Band and dwell coverage is tested before geometry, so multi-band sensors only compute
+    geometry for emissions they can hear.
+  - Geometry uses 1-D component arrays.
+  - Link columns are float32 (`range_m` stays float64 since it sets sample timing) and are
+    concatenated straight into their final dtype.
+  - Sensors are computed in parallel threads (NumPy releases the GIL), merged in sensor order;
+    a test checks the result equals a single-threaded run.
+- **Tried and rejected:** resampling filters sized to the OFDM signal band (2–3× shorter) and a
+  shorter fractional-delay FIR. They were faster, but against an exact trigonometric-interpolation
+  reference they lost 10–25 dB of accuracy (down to −32 dB at 30.72 MS/s), which the end-to-end
+  tolerances did not catch. That reference comparison is now a permanent test (< −45 dB in band).
+- **Remaining costs** are intrinsic to the signal model:
+  - per-sample carrier phase and interpolation for every emission sample;
+  - the FM generator for continuous analog video;
+  - the band-edge bandpass, whose ~4 MHz transition needs about 55 native samples per output;
+  - in the planning stage, Parquet writing for tens of millions of link rows.
+
+  GPU or Kubernetes back ends would fit the existing `(job, chunk) → bytes at offset` worker
+  interface.
+- **Not done** from the original Phase 5 list:
+  - template caching (with per-emission seeds and delays, few bursts are identical);
+  - pyFFTW (FFTs are not a significant cost after profiling).
 
 ## 13. Testing strategy
 
