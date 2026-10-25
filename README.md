@@ -258,12 +258,12 @@ communication:
 - `exponential`: Pd = exp(-k * d)
 - `sigmoid`: Pd = 1/(1 + exp(k * (d - half_range)))
 
-## RF Emitters and SigMF (preview)
+## RF Emitters and SigMF
 
-swarmsim is gaining an RF layer: drones, their ground controllers and background devices act as RF
+swarmsim has an RF layer: drones, their ground controllers and background devices act as RF
 emitters with commercial link profiles, and RF sensors record SigMF IQ. See
-[docs/design/rf-sigmf.md](docs/design/rf-sigmf.md) for the full design. **Phases 0–4** are
-available now:
+[docs/design/rf-sigmf.md](docs/design/rf-sigmf.md) for the full design. All planned phases
+(**0–5**) are implemented:
 
 - Every emission is scheduled, and each sensor gets a link budget (free-space loss, radio horizon,
   SNR, detectability, Doppler, bearing).
@@ -285,6 +285,9 @@ available now:
   - DJI OcuSync and DroneID: LTE-like OFDM with Zadoff-Chu sync.
   - Wi-Fi and Remote ID over Wi-Fi: 802.11 OFDM with the legacy preamble.
   - BLE, Remote ID over BLE and SiK: GFSK.
+- Synthesis runs in parallel worker processes, and output is byte-identical for any worker count.
+  Phase 5 profiling raised 4-worker throughput 1.5–2× and cut planning time by about 60% (see
+  [RF Synthesis Benchmarks](#rf-synthesis-benchmarks)).
 
 ```bash
 uv sync --extra rf    # optional: pyarrow (Parquet truth) and sigmf-python
@@ -306,6 +309,18 @@ of every recording with the truth emissions boxed, plus zoomed panels (`--zoom
 RF-04_ism2g4:200:8`, in ms from the window start). For each multichannel recording it runs MUSIC
 on the array IQ and compares the bearings with the `spatial:signal_bearing` truth. PNGs go to
 `<run>/plots/`.
+
+Half a second of `rf_fpv_mix` (`--window 20:20.5`, all four sensors), plotted with `--zoom
+RF-01_ism915:0:60 --zoom RF-04_ism2g4:200:8 --df RF-02_ism2g4`:
+
+![Spectrograms of the six rf_fpv_mix recordings with ground-truth emission boxes](docs/rf/rf_fpv_mix_overview.png)
+
+![Burst-level zooms: ExpressLRS hops at 915 MHz, and Wi-Fi and DJI bursts at 2.4 GHz](docs/rf/rf_fpv_mix_zoom.png)
+
+![MUSIC bearings from RF-02's 4-channel recording compared with truth](docs/rf/rf_fpv_mix_df.png)
+
+The direction-finding table shows the expected failure mode: the two Wi-Fi bursts that MUSIC
+misses overlapped a stronger co-channel signal from about 177° (negative co-channel margin).
 
 IQ is large: a single 100 MS/s ci16 channel writes 400 MB/s. The CLI checks the estimate against
 free disk space (override with `--force`). Use `--window` and `--sensors` to synthesize a subset,

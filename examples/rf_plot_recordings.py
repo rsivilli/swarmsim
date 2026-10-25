@@ -534,6 +534,7 @@ def plot_df(truth: Truth, rec: Recording, out: Path) -> list[dict]:
             cell.set_edgecolor("#e4e3de")
             if row == 0:
                 cell.set_text_props(fontweight="bold", color=TEXT2)
+                cell.set_height(cell.get_height() * 1.7)  # two-line headers
             elif col == 0:
                 cell.get_text().set_color(color(results[row - 1]["profile"]))
     else:
