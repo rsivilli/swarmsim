@@ -245,7 +245,7 @@ class RFSensorConfig:
 class RFConfig:
     epoch: str = "2026-01-01T00:00:00Z"
     window: tuple[float, float] | None = None  # (start, end) seconds; None = whole scenario
-    chunk_samples: int = 4_194_304
+    chunk_samples: int = 1_048_576
     cull_snr_db: float = -15.0
     annotation_granularity: AnnotationGranularity = AnnotationGranularity.DWELL
     annotation_max_gap_s: float = 0.05  # dwell grouping: split when the gap exceeds this

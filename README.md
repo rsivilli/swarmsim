@@ -283,6 +283,7 @@ available now:
 uv sync --extra rf    # optional: pyarrow (Parquet truth) and sigmf-python
 uv run modsim rf scenarios/rf_fpv_mix.yaml --dry-run                          # truth + sizing only
 uv run modsim rf scenarios/rf_fpv_mix.yaml --window 0:2 --sensors RF-01,RF-04 # synthesize IQ
+uv run python benchmarks/rf_bench.py                                           # throughput
 # output/rf/rf_fpv_mix/
 #   manifest.json        sizing, counts, seeds, timings, synthesis results
 #   truth/emitters.*     every drone, controller and background emitter
@@ -377,6 +378,25 @@ Benchmarked on Apple Silicon. Scaling is roughly linear in `objects * sensors * 
 | 1,000 | 50 | 300 | ~0.8s |
 | 10,000 | 100 | 300 | ~17s |
 | 50,000 | 100 | 100 | ~32s |
+
+### RF Synthesis Benchmarks
+
+Run with `uv run python benchmarks/rf_bench.py` (workloads drawn from `scenarios/rf_fpv_mix.yaml`).
+Throughput is complex samples per second summed over channels, measured on a 4-core Linux
+container. Cost scales with the samples of every emission a sensor hears, so dense bands are
+slower than sparse ones.
+
+| Workload | Recording | 1 worker | 4 workers |
+|----------|-----------|----------|-----------|
+| `elrs_915` | 915 MHz, 30 MS/s; 12 ELRS radios | 3.6 MS/s | 8.7 MS/s |
+| `fpv_5g8` | 5.8 GHz, 40 MS/s; 6 continuous analog FPV + DJI downlink | 1.0 MS/s | 3.1 MS/s |
+| `busy_2g4` | 2.4 GHz, 100 MS/s; ~560 Wi-Fi/BLE devices + DJI + Remote ID | 0.9 MS/s | 3.3 MS/s |
+| `df_2g4` | 2.4 GHz, 4-element UCA, 100 MS/s per channel | 1.0 MS/s | 3.2 MS/s |
+| `scan_3band` | 3-band scanner, 100 MS/s | 1.4 MS/s | 4.1 MS/s |
+
+Planning (emission schedule, link budget, truth tables) for 1,000 ELRS+FPV drones (2,000 radios)
+against 10 sensors over 30 s takes about 28 s for 4.5 M emissions and 45 M link rows, plus about
+13 s to write the Parquet truth tables. Output is byte-identical for any `--workers` count.
 
 ## Comms Export Format
 

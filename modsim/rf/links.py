@@ -7,6 +7,8 @@ Two-ray, fading and receiver impairments arrive in later phases (see docs/design
 
 from __future__ import annotations
 
+import os
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 
 import numpy as np
@@ -79,6 +81,16 @@ LINK_COLUMNS = (
 )
 
 
+# Link columns are float32 (millions of rows) except range, which sets sample timing
+LINK_DTYPES = {
+    "emission_idx": np.int64,
+    "sensor_idx": np.int32,
+    "band_idx": np.int32,
+    "range_m": np.float64,
+    "detectable": bool,
+}
+
+
 def _per_link(emitter_idx, emitters, sensor_id, scenario_seed, fn) -> np.ndarray:
     """Evaluate ``fn(link_seed, rows)`` for each emitter's rows; returns values aligned to rows."""
     out = np.zeros(len(emitter_idx))
@@ -138,10 +150,9 @@ def compute_links(
     ``detectable`` uses snr_db + fade_db.
     """
     prop = prop or PropagationConfig()
-    out: dict[str, list[np.ndarray]] = {c: [] for c in LINK_COLUMNS}
     n = len(emissions)
     if n == 0 or not sensors:
-        return {c: np.empty(0) for c in LINK_COLUMNS}
+        return {c: np.empty(0, dtype=LINK_DTYPES.get(c, np.float32)) for c in LINK_COLUMNS}
 
     f = emissions.f_center_hz
     bw = emissions.bandwidth_hz
@@ -151,43 +162,62 @@ def compute_links(
     t_e = t_s + emissions.duration
     all_idx = np.arange(n)
 
-    for si, sensor in enumerate(sensors):
+    def one(si: int, sensor: RFSensorConfig) -> dict[str, list[np.ndarray]]:
+        out: dict[str, list[np.ndarray]] = {c: [] for c in LINK_COLUMNS}
         sp = np.array([sensor.position.x, sensor.position.y, sensor.position.z])
-        geo = relative_geometry(states.pos_km, states.vel_kmps, sp)
-        horizon = radio_horizon_m(states.pos_km[:, 2] * 1000.0, sp[2] * 1000.0, k_factor)
-        visible = geo["ground_range_m"] <= horizon
-
         if sensor.tuning.mode == TuningMode.SCANNING:
             slots, cycle = scan_slots(sensor)
             dwell = sensor.tuning.dwell_ms / 1000.0
+
+        # Spectral and dwell coverage first (cheap); geometry only for emissions in some band
+        per_band = []
         for bi, band in enumerate(sensor.tuning.bands):
             overlap = np.minimum(f_hi, band.high_hz) - np.maximum(f_lo, band.low_hz)
-            frac = np.where(bw > 0, np.clip(overlap / np.maximum(bw, 1e-9), 0.0, 1.0), 0.0)
+            in_band = (overlap > 0) & (bw > 0)
+            idx = all_idx[in_band]
+            observed = np.ones(len(idx))
             if sensor.tuning.mode == TuningMode.SCANNING:
-                observed = np.zeros(n)
+                observed = np.zeros(len(idx))
                 for slot_band, offset in slots:
                     if slot_band == bi:
                         observed += _scan_observed(
-                            t_s - window[0], t_e - window[0], offset, dwell, cycle
+                            t_s[idx] - window[0], t_e[idx] - window[0], offset, dwell, cycle
                         )
-            else:
-                observed = np.ones(n)
+                keep = observed > 0
+                idx, observed = idx[keep], observed[keep]
+            frac = np.clip(overlap[idx] / bw[idx], 0.0, 1.0)
+            per_band.append((bi, idx, frac, overlap[idx], observed))
+        in_any = np.zeros(n, dtype=bool)
+        for p in per_band:
+            in_any[p[1]] = True
+        union = np.flatnonzero(in_any)
+        if len(union) == 0:
+            return out
+        where = np.full(n, -1, dtype=np.int64)
+        where[union] = np.arange(len(union))
+        geo_u = relative_geometry(states.pos_km[union], states.vel_kmps[union], sp)
+        horizon = radio_horizon_m(states.pos_km[union, 2] * 1000.0, sp[2] * 1000.0, k_factor)
+        visible_u = geo_u["ground_range_m"] <= horizon
 
-            cand = visible & (frac > 0) & (observed > 0)
-            if not cand.any():
+        for bi, idx_b, frac_b, overlap_b, observed_b in per_band:
+            vis = visible_u[where[idx_b]]
+            if not vis.any():
                 continue
-            idx = all_idx[cand]
-            pl = fspl_db(geo["range_m"][idx], f[idx])
+            idx = idx_b[vis]
+            frac_i, overlap_i, observed_i = frac_b[vis], overlap_b[vis], observed_b[vis]
+            gi = where[idx]
+            geo = {k: v[gi] for k, v in geo_u.items()}
+            pl = fspl_db(geo["range_m"], f[idx])
             rx = (
                 emissions.eirp_dbm[idx].astype(np.float64)
                 - pl
                 + sensor.rx_gain_dbi
-                + 10.0 * np.log10(frac[idx])
+                + 10.0 * np.log10(frac_i)
             )
             if sensor.array is not None and sensor.array.element_pattern != "isotropic":
                 # Per-element SNR: element pattern averaged over the array toward the emitter
                 rx = rx + mean_pattern_gain_db(
-                    sensor.array, geo["azimuth_deg"][idx], geo["elevation_deg"][idx]
+                    sensor.array, geo["azimuth_deg"], geo["elevation_deg"]
                 )
             two_ray = np.zeros(len(idx))
             if prop.ground_reflection:
@@ -204,19 +234,21 @@ def compute_links(
                     lambda seed, rows: shadowing_db(seed, speed_m[rows] * t_mid[idx][rows], prop),
                 )
             rx = rx + two_ray + shadow
-            noise = noise_floor_dbm(np.maximum(overlap[idx], 1.0), sensor.receiver.noise_figure_db)
+            noise = noise_floor_dbm(np.maximum(overlap_i, 1.0), sensor.receiver.noise_figure_db)
             snr = rx - noise
             keep = snr >= cull_snr_db
             idx, pl, rx, noise, snr = idx[keep], pl[keep], rx[keep], noise[keep], snr[keep]
             two_ray, shadow = two_ray[keep], shadow[keep]
+            frac_i, observed_i = frac_i[keep], observed_i[keep]
+            geo = {k: v[keep] for k, v in geo.items()}
             if len(idx) == 0:
                 continue
             fade = np.zeros(len(idx))
             if prop.fading == "rician":
-                t_rx = t_mid[idx] + geo["range_m"][idx] / C_MPS
+                t_rx = t_mid[idx] + geo["range_m"] / C_MPS
                 speed_m = np.linalg.norm(states.vel_kmps[idx], axis=1) * 1000.0
                 f_d = doppler_spread_hz(speed_m, f[idx], prop)
-                k_lin = rician_k_linear(geo["elevation_deg"][idx], prop)
+                k_lin = rician_k_linear(geo["elevation_deg"], prop)
                 fade = _per_link(
                     emissions.emitter_idx[idx],
                     emitters,
@@ -233,18 +265,18 @@ def compute_links(
                         )
                     ),
                 )
-            vr = geo["radial_velocity_mps"][idx]
+            vr = geo["radial_velocity_mps"]
             out["emission_idx"].append(idx)
             out["sensor_idx"].append(np.full(len(idx), si))
             out["band_idx"].append(np.full(len(idx), bi))
-            out["range_m"].append(geo["range_m"][idx])
-            out["azimuth_deg"].append(geo["azimuth_deg"][idx])
-            out["elevation_deg"].append(geo["elevation_deg"][idx])
+            out["range_m"].append(geo["range_m"])
+            out["azimuth_deg"].append(geo["azimuth_deg"])
+            out["elevation_deg"].append(geo["elevation_deg"])
             out["radial_velocity_mps"].append(vr)
             out["doppler_hz"].append(doppler_hz(f[idx], vr))
             out["path_loss_db"].append(pl)
-            out["band_fraction"].append(frac[idx])
-            out["observed_fraction"].append(observed[idx])
+            out["band_fraction"].append(frac_i)
+            out["observed_fraction"].append(observed_i)
             out["rx_power_dbm"].append(rx)
             out["noise_dbm"].append(noise)
             out["snr_db"].append(snr)
@@ -252,16 +284,17 @@ def compute_links(
             out["shadow_db"].append(shadow)
             out["fade_db"].append(fade)
             out["detectable"].append(snr + fade >= sensor.detector.threshold_snr_db)
+        return out
 
-    dtypes = {
-        "emission_idx": np.int64,
-        "sensor_idx": np.int32,
-        "band_idx": np.int32,
-        "detectable": bool,
-    }
+    # Sensors are independent and the work is large NumPy array operations (which release the
+    # GIL), so threads parallelize it without copying the emission tables; results are merged
+    # in sensor order, so the table does not depend on scheduling.
+    with ThreadPoolExecutor(max_workers=max(1, min(len(sensors), os.cpu_count() or 1))) as pool:
+        parts = list(pool.map(one, range(len(sensors)), sensors))
+    out = {c: [a for part in parts for a in part[c]] for c in LINK_COLUMNS}
     return {
-        c: np.concatenate(v).astype(dtypes.get(c, np.float64))
+        c: np.concatenate(v, dtype=LINK_DTYPES.get(c, np.float32))
         if v
-        else np.empty(0, dtype=dtypes.get(c, np.float64))
+        else np.empty(0, dtype=LINK_DTYPES.get(c, np.float32))
         for c, v in out.items()
     }
