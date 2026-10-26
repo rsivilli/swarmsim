@@ -243,13 +243,21 @@ def _rebase_ts(event_time_sec: float) -> str:
 
 
 def _rebase_payload_timestamps(payload: dict, event_time_sec: float) -> dict:
-    """Return a shallow copy of payload with ts/msgTs rebased to wall-clock."""
+    """Return a copy of payload with ts/msgTs rebased to wall-clock.
+
+    Bundled payloads ({"tracks": [...]}) have the timestamps on each track.
+    """
     ts_iso = _rebase_ts(event_time_sec)
     payload = dict(payload)
     if "ts" in payload:
         payload["ts"] = ts_iso
     if "msgTs" in payload:
         payload["msgTs"] = ts_iso
+    if isinstance(payload.get("tracks"), list):
+        payload["tracks"] = [
+            _rebase_payload_timestamps(t, event_time_sec) if isinstance(t, dict) else t
+            for t in payload["tracks"]
+        ]
     return payload
 
 

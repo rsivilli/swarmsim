@@ -6,6 +6,16 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Locust replay of bundled timelines sent each track with its 1970 simulation timestamp instead of
+  rebasing `ts`/`msgTs` to wall-clock time (REST and native Zenoh transports).
+
+### Changed
+
+- Tests now check that the Locust replay script reads both comms export formats correctly, and
+  the slowest RF test runs in milliseconds instead of over a minute.
+
 ## [0.3.0] - 2026-10-25
 
 ### Added
