@@ -344,15 +344,25 @@ class TestPhase5Equivalence:
     @pytest.mark.parametrize("fs", [100e6, 30.72e6])
     def test_native_resampling_against_exact_interpolation(self, fs):
         """Guard on OFDM placement accuracy: compare with exact trigonometric interpolation of
-        the band-limited burst (zero-padded, so periodic extension is harmless)."""
+        the band-limited burst (zero-padded, so periodic extension is harmless). Output times and
+        frequency bins are both uniform, so the interpolation sum is a chirp-z transform; the
+        direct n×m sum gives the same result but takes over a minute at 100 MS/s."""
+        from scipy.signal import czt
+
         native, rate = wifi_burst(0.0002, seed=4)
         pad = np.zeros(3 * len(native), dtype=complex)
         pad[len(native) : 2 * len(native)] = native
         spec, m = np.fft.fft(pad), len(pad)
-        k = np.fft.fftfreq(m, 1 / m)
         n = int(1.5e-4 * fs)
-        t = 2.5e-7 + np.arange(n) / fs
-        exact = np.exp(2j * np.pi * np.outer(t * rate + len(native), k) / m) @ spec / m
+        # exact[j] = Σ_k spec[k] exp(2πi k (a + j d) / m) / m over k = -m/2 … m/2 - 1
+        a, d = 2.5e-7 * rate + len(native), rate / fs
+        k = np.arange(-(m // 2), m - m // 2)
+        x = np.fft.fftshift(spec) * np.exp(2j * np.pi * (k - k[0]) * a / m)
+        exact = (
+            np.exp(2j * np.pi * k[0] * (a + np.arange(n) * d) / m)
+            * czt(x, n, w=np.exp(2j * np.pi * d / m), a=1)
+            / m
+        )
         f = np.fft.fftfreq(n, 1 / fs)
         band = np.abs(f) < 8.5e6  # the Wi-Fi channel
         for got in (
