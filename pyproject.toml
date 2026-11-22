@@ -24,7 +24,7 @@ dependencies = [
     "numpy>=2.0",
     "matplotlib>=3.9",
     "pyyaml>=6.0",
-    "click>=8.0",
+    "click>=8.5.1",
     "scipy>=1.17.0",
     "cartopy>=0.25.0",
 ]
@@ -39,7 +39,7 @@ Changelog = "https://github.com/rsivilli/swarmsim/blob/main/CHANGELOG.md"
 loadtest = [
     "locust>=2.47.0",
     "eclipse-zenoh>=1.10.2",
-    "pydantic-settings>=2.16.2",
+    "pydantic-settings>=2.16.3",
 ]
 udl = [
     "udl-sdk>=0.1.0a34",
@@ -53,7 +53,7 @@ rf = [
 dev = [
     "pyarrow>=26.0.1",
     "pytest>=9.2.0",
-    "ruff>=0.17.3",
+    "ruff>=0.17.6",
     "sigmf>=1.2",
 ]
 
